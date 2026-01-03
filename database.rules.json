@@ -1,0 +1,14 @@
+{
+  "rules": {
+    "loanReservations": {
+      "$loanId": {
+        ".read": "auth != null",
+        
+        "$investorId": {
+          ".write": "auth != null && auth.uid === $investorId",
+          ".validate": "newData.hasChildren(['investorId', 'amount', 'reservedAt', 'expiresAt']) && newData.child('investorId').val() === $investorId && newData.child('amount').isNumber() && newData.child('amount').val() > 0 && newData.child('reservedAt').isNumber() && newData.child('expiresAt').isNumber()"
+        }
+      }
+    }
+  }
+}

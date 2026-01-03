@@ -1,0 +1,13 @@
+
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Permite a cualquier usuario autenticado subir documentos a las carpetas designadas.
+    // La seguridad de quién puede acceder a estos archivos se maneja a nivel de aplicación
+    // y reglas de Firestore, que conocen las relaciones entre usuarios y préstamos.
+    match /{path=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

@@ -1,0 +1,18 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default-deny all access to all documents
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Allow authenticated users to read and write to any collection.
+    // This is a permissive rule for development, and should be tightened
+    // in a production environment.
+    match /{collection}/{docId} {
+      allow read, create, update, delete: if request.auth != null;
+    }
+  }
+}
