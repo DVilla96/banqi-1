@@ -5,10 +5,11 @@
 import { useState, useEffect, useMemo, useContext } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Handshake, Send, Hourglass, Loader2, CheckCircle, PiggyBank, FileCheck2, AlertCircle, XCircle, Check, CheckCheck, CalendarDays, DollarSign, ListChecks, TestTube2, User, FileWarning, RotateCcw } from 'lucide-react';
+import { Handshake, Send, Hourglass, Loader2, CheckCircle, PiggyBank, FileCheck2, AlertCircle, XCircle, Check, CheckCheck, CalendarDays, DollarSign, ListChecks, TestTube2, User, FileWarning, RotateCcw, Timer } from 'lucide-react';
 import Link from 'next/link';
-import { db, storage } from '@/lib/firebase';
-import { collection, query, where, DocumentData, doc, updateDoc, getDoc, onSnapshot, runTransaction, addDoc, serverTimestamp, getDocs, limit, orderBy, writeBatch, deleteDoc } from 'firebase/firestore';
+import { db, storage, rtdb } from '@/lib/firebase';
+import { ref as rtdbRef, onValue } from 'firebase/database';
+import { collection, query, where, DocumentData, doc, updateDoc, getDoc, onSnapshot, runTransaction, addDoc, serverTimestamp, getDocs, limit, orderBy, writeBatch, deleteDoc, Timestamp } from 'firebase/firestore';
 import { useAuth, UserProfile } from '@/hooks/use-auth';
 import type { Loan, Investment, ReinvestmentSource, Payment, PaymentBreakdown } from '@/lib/types';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -23,10 +24,11 @@ import { addDays, addMonths, format, setDate, differenceInDays, startOfDay, pars
 import { es } from 'date-fns/locale';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import RepaymentModal from '@/components/portal/repayment-modal';
+import RepaymentModal, { type BankerReinvestAmount } from '@/components/portal/repayment-modal';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { SimulationContext } from '@/hooks/use-simulation-date';
+import { BANQI_FEE_INVESTOR_ID } from '@/lib/constants';
 import {
   Dialog,
   DialogContent,
@@ -37,6 +39,12 @@ import {
 } from '@/components/ui/dialog';
 import { Slider } from '@/components/ui/slider';
 
+// Tipo para distribución de pago entre múltiples préstamos
+export type LoanPaymentDistribution = {
+  loan: Loan;
+  amount: number;
+  proofFile?: File;
+};
 
 type ActiveLoanRequest = Loan & {
   id: string;
@@ -51,8 +59,6 @@ const formatCurrency = (value: number, decimals = 2) => {
       minimumFractionDigits: decimals,
     }).format(value);
 };
-
-const BANQI_FEE_INVESTOR_ID = 'banqi_platform_fee';
 
 
 export default function PortalPage() {
@@ -78,9 +84,12 @@ export default function PortalPage() {
   const [isRepaymentModalOpen, setIsRepaymentModalOpen] = useState(false);
   const [isPaymentAmountModalOpen, setIsPaymentAmountModalOpen] = useState(false);
   const [selectedPaymentAmount, setSelectedPaymentAmount] = useState<number>(0);
-  const [nextLoanInQueue, setNextLoanInQueue] = useState<Loan | null>(null);
+  const [loansInQueue, setLoansInQueue] = useState<Loan[]>([]); // Múltiples préstamos en cola
+  const [paymentDistribution, setPaymentDistribution] = useState<LoanPaymentDistribution[]>([]); // Distribución del pago
   const [processingPayment, setProcessingPayment] = useState<Investment | null>(null);
   const [bankersForModal, setBankersForModal] = useState<Investment[]>([]);
+  const [hasActiveReservation, setHasActiveReservation] = useState(false); // Para mostrar indicador en card
+  const [reservationTimeRemaining, setReservationTimeRemaining] = useState(0);
   const { toast } = useToast();
   
   useEffect(() => {
@@ -226,6 +235,65 @@ export default function PortalPage() {
     }
 
   }, [activeLoan, loanInvestments, loanPayments, simulationDate]);
+
+  // 🔥 Escuchar MIS reservaciones activas en RTDB para mostrar indicador en card
+  // Solo escuchar los préstamos que están en la distribución actual
+  useEffect(() => {
+    if (!user || paymentDistribution.length === 0) {
+      setHasActiveReservation(false);
+      setReservationTimeRemaining(0);
+      return;
+    }
+
+    console.log('[Portal RTDB] Setting up listeners for', paymentDistribution.length, 'loans');
+    const unsubscribers: (() => void)[] = [];
+    
+    paymentDistribution.forEach(dist => {
+      const reservationRef = rtdbRef(rtdb, `loanReservations/${dist.loan.id}/${user.uid}`);
+      
+      const unsub = onValue(reservationRef, (snapshot) => {
+        const now = Date.now();
+        
+        if (snapshot.exists()) {
+          const myReservation = snapshot.val();
+          console.log('[Portal RTDB] Found my reservation:', myReservation);
+          
+          if (myReservation.expiresAt > now) {
+            console.log('[Portal RTDB] Reservation is ACTIVE!');
+            setHasActiveReservation(true);
+            setReservationTimeRemaining(Math.max(0, Math.floor((myReservation.expiresAt - now) / 1000)));
+          } else {
+            console.log('[Portal RTDB] Reservation EXPIRED');
+          }
+        }
+      }, (error) => {
+        console.error('[Portal RTDB] Error listening:', error);
+      });
+      
+      unsubscribers.push(unsub);
+    });
+
+    return () => {
+      unsubscribers.forEach(unsub => unsub());
+    };
+  }, [user, paymentDistribution]);
+
+  // Timer para actualizar el tiempo restante cada segundo
+  useEffect(() => {
+    if (!hasActiveReservation || reservationTimeRemaining <= 0) return;
+    
+    const interval = setInterval(() => {
+      setReservationTimeRemaining(prev => {
+        if (prev <= 1) {
+          setHasActiveReservation(false);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [hasActiveReservation, reservationTimeRemaining]);
   
   const fundedPercentage = activeLoan?.fundedPercentage || 0;
   const committedPercentage = activeLoan?.committedPercentage || 0;
@@ -241,13 +309,12 @@ export default function PortalPage() {
     setActionLoading(true);
 
     try {
-        // 1. Fetch the next loan in the queue
+        // 1. Fetch ALL loans in the queue (no limit)
         const nextLoanQuery = query(
             collection(db, 'loanRequests'),
             where('status', '==', 'funding-active'),
             where('committedPercentage', '<', 100),
-            orderBy('fundingOrder', 'asc'),
-            limit(1)
+            orderBy('fundingOrder', 'asc')
         );
         const nextLoanSnapshot = await getDocs(nextLoanQuery);
 
@@ -257,37 +324,75 @@ export default function PortalPage() {
             return;
         }
 
-        const nextLoanDoc = nextLoanSnapshot.docs[0];
-        const nextLoanData = { id: nextLoanDoc.id, ...nextLoanDoc.data() } as Loan;
+        // 2. Enrich all loans with user data (for bank details)
+        const enrichedLoans: Loan[] = await Promise.all(
+            nextLoanSnapshot.docs.map(async (loanDoc) => {
+                const loanData = { id: loanDoc.id, ...loanDoc.data() } as Loan;
+                if (loanData.requesterId) {
+                    const userRef = doc(db, 'users', loanData.requesterId);
+                    const userSnap = await getDoc(userRef);
+                    if (userSnap.exists()) {
+                        const userData = userSnap.data() as UserProfile;
+                        return {
+                            ...loanData,
+                            requesterFirstName: userData.firstName,
+                            requesterLastName: userData.lastName,
+                            bankName: userData.bankName,
+                            accountType: userData.accountType,
+                            accountNumber: userData.accountNumber,
+                        };
+                    }
+                }
+                return loanData;
+            })
+        );
+        
+        setLoansInQueue(enrichedLoans);
 
-        // Enrich the next loan with its user data (for bank details)
-        let enrichedNextLoan: Loan = nextLoanData;
-        if (nextLoanData.requesterId) {
-            const userRef = doc(db, 'users', nextLoanData.requesterId);
-            const userSnap = await getDoc(userRef);
-            if (userSnap.exists()) {
-                const userData = userSnap.data() as UserProfile;
-                enrichedNextLoan = {
-                    ...nextLoanData,
-                    requesterFirstName: userData.firstName,
-                    requesterLastName: userData.lastName,
-                    bankName: userData.bankName,
-                    accountType: userData.accountType,
-                    accountNumber: userData.accountNumber,
-                };
+        // 3. Distribute the payment amount across available loans
+        let remainingAmount = amount;
+        const distribution: LoanPaymentDistribution[] = [];
+        
+        for (const loan of enrichedLoans) {
+            if (remainingAmount <= 0) break;
+            
+            // Calculate how much this loan can receive
+            const amountAvailable = loan.amount * (1 - (loan.committedPercentage || 0) / 100);
+            
+            if (amountAvailable > 0) {
+                const amountForThisLoan = Math.min(remainingAmount, amountAvailable);
+                distribution.push({
+                    loan,
+                    amount: amountForThisLoan,
+                });
+                remainingAmount -= amountForThisLoan;
             }
         }
         
-        setNextLoanInQueue(enrichedNextLoan);
+        // Check if we could distribute the full amount
+        if (remainingAmount > 0) {
+            const totalAvailable = enrichedLoans.reduce((sum, loan) => {
+                return sum + loan.amount * (1 - (loan.committedPercentage || 0) / 100);
+            }, 0);
+            toast({ 
+                title: "Monto excede disponibilidad", 
+                description: `Solo hay ${formatCurrency(totalAvailable, 0)} disponibles en los préstamos en cola. Reduce el monto del pago.`, 
+                variant: 'destructive'
+            });
+            setActionLoading(false);
+            return;
+        }
+        
+        setPaymentDistribution(distribution);
 
-        // 2. Calculate the PRECISE payment breakdown
+        // 4. Calculate the PRECISE payment breakdown
         const scheduleResult = generatePreciseAmortizationSchedule(activeLoan, loanInvestments, loanPayments, simulationDate);
         if (!scheduleResult) throw new Error("No se pudo generar el plan de pagos para el desglose.");
 
         const breakdown = calculatePrecisePaymentBreakdown(amount, scheduleResult.schedule, activeLoan, simulationDate, loanInvestments);
         setPaymentBreakdown(breakdown);
 
-        // 3. Enrich the original investors (bankers) to show in the modal
+        // 5. Enrich the original investors (bankers) to show in the modal
         const enrichedBankers = await Promise.all(
             loanInvestments.map(async (inv) => {
                 let name = 'Banquero Anónimo';
@@ -316,68 +421,122 @@ export default function PortalPage() {
     }
   }
   
-  const confirmRepayment = async (proofFile: File) => {
-    if (!user || !activeLoan || !nextLoanInQueue || !paymentBreakdown) {
+  const confirmRepayment = async (proofFiles: Map<string, File>, finalDistribution?: LoanPaymentDistribution[], bankerReinvestAmounts?: BankerReinvestAmount[]) => {
+    // Usar la distribución final (redistribuida) si se proporciona, sino usar la original
+    const distributionToUse = finalDistribution && finalDistribution.length > 0 ? finalDistribution : paymentDistribution;
+    
+    if (!user || !activeLoan || distributionToUse.length === 0 || !paymentBreakdown) {
         toast({ title: 'Error', description: 'Faltan datos para procesar el pago.', variant: 'destructive' });
         return;
     }
 
     try {
-        const proofRef = ref(storage, `repayment-proofs/${nextLoanInQueue.id}/${user.uid}-${Date.now()}`);
-        const uploadResult = await uploadBytes(proofRef, proofFile);
-        const proofUrl = await getDownloadURL(uploadResult.ref);
-
-        await runTransaction(db, async (transaction) => {
-            const receivingLoanRef = doc(db, 'loanRequests', nextLoanInQueue.id);
-            const receivingLoanDoc = await transaction.get(receivingLoanRef);
-
-            if (!receivingLoanDoc.exists()) {
-                throw new Error('El préstamo receptor ya no existe.');
+        // 1. PRIMERO: Subir todos los comprobantes ANTES de la transacción
+        const uploadedProofs: Map<string, string> = new Map();
+        for (const dist of distributionToUse) {
+            const proofFile = proofFiles.get(dist.loan.id);
+            if (!proofFile) {
+                throw new Error(`Falta el comprobante para el préstamo de ${dist.loan.requesterFirstName}`);
             }
-
-            const receivingLoanData = receivingLoanDoc.data();
-            const amountAvailableToFund = receivingLoanData.amount * (1 - (receivingLoanData.committedPercentage || 0) / 100);
-
-            if (paymentBreakdown.total > amountAvailableToFund) {
-                throw new Error("El monto disponible para fondear ha cambiado. Inténtalo de nuevo.");
-            }
-
-            // This is a simplified breakdown for repayment logic
-            // A more precise breakdown would be needed for perfect accounting
-            const sourceBreakdown: ReinvestmentSource[] = bankersForModal.map(banker => ({
-                investorId: banker.investorId || '',
-                amount: paymentBreakdown.total * (banker.amount / activeLoan.amount) // Pro-rata distribution
-            }));
-
-            const { details, ...breakdownToStore } = paymentBreakdown;
-
-            const investmentData: Omit<Investment, 'id'> = {
-                loanId: nextLoanInQueue.id,
-                payingLoanId: activeLoan.id, // Store the ID of the loan being paid
-                payerId: user.uid, // The user paying the installment
-                borrowerId: nextLoanInQueue.requesterId, // The user receiving the funds
-                amount: paymentBreakdown.total,
-                status: 'pending-confirmation',
-                paymentProofUrl: proofUrl,
-                createdAt: serverTimestamp(),
-                isRepayment: true,
-                sourceBreakdown: sourceBreakdown,
-                paymentBreakdown: breakdownToStore, // Store the breakdown for payment registration
-            };
-
-            transaction.set(doc(collection(db, 'investments')), investmentData);
-
-            const newCommittedAmount = (receivingLoanData.committedPercentage / 100 * receivingLoanData.amount) + paymentBreakdown.total;
-            const newCommittedPercentage = Math.min(100, (newCommittedAmount / receivingLoanData.amount) * 100);
             
-            transaction.update(receivingLoanRef, { 
-                committedPercentage: newCommittedPercentage,
-             });
+            const proofRef = ref(storage, `repayment-proofs/${dist.loan.id}/${user.uid}-${Date.now()}`);
+            const uploadResult = await uploadBytes(proofRef, proofFile);
+            const proofUrl = await getDownloadURL(uploadResult.ref);
+            uploadedProofs.set(dist.loan.id, proofUrl);
+        }
+
+        // 2. Ahora ejecutar la transacción de Firestore (solo lecturas primero, luego escrituras)
+        await runTransaction(db, async (transaction) => {
+            // FASE DE LECTURAS: Verificar disponibilidad de todos los préstamos
+            const verifiedLoans: { dist: LoanPaymentDistribution, loanData: any }[] = [];
+            
+            for (const dist of distributionToUse) {
+                const receivingLoanRef = doc(db, 'loanRequests', dist.loan.id);
+                const receivingLoanDoc = await transaction.get(receivingLoanRef);
+
+                if (!receivingLoanDoc.exists()) {
+                    throw new Error(`El préstamo de ${dist.loan.requesterFirstName} ya no existe.`);
+                }
+
+                const receivingLoanData = receivingLoanDoc.data();
+                const amountAvailableToFund = receivingLoanData.amount * (1 - (receivingLoanData.committedPercentage || 0) / 100);
+
+                if (dist.amount > amountAvailableToFund + 1) { // +1 para tolerancia de redondeo
+                    throw new Error(`El monto disponible en el préstamo de ${dist.loan.requesterFirstName} ha cambiado. Inténtalo de nuevo.`);
+                }
+                
+                verifiedLoans.push({ dist, loanData: receivingLoanData });
+            }
+            
+            // FASE DE ESCRITURAS: Crear las inversiones y actualizar préstamos
+            for (const { dist, loanData } of verifiedLoans) {
+                const proofUrl = uploadedProofs.get(dist.loan.id)!;
+
+                // Calcular breakdown para esta porción del pago
+                const portionRatio = dist.amount / paymentBreakdown.total;
+                
+                // Usar los montos exactos de reinversión por banquero (calculados en el modal)
+                // Si no se proporcionan, usar el cálculo proporcional simple como fallback
+                let sourceBreakdown: ReinvestmentSource[];
+                if (bankerReinvestAmounts && bankerReinvestAmounts.length > 0) {
+                    // Calcular el total de reinversión para obtener proporción
+                    const totalReinvest = bankerReinvestAmounts.reduce((acc, b) => acc + b.amount, 0);
+                    sourceBreakdown = bankerReinvestAmounts.map(banker => ({
+                        investorId: banker.investorId,
+                        // Proporcionar el monto proporcional a esta distribución específica
+                        amount: dist.amount * (banker.amount / totalReinvest)
+                    }));
+                } else {
+                    // Fallback: cálculo simple proporcional al monto invertido
+                    sourceBreakdown = bankersForModal.map(banker => ({
+                        investorId: banker.investorId || '',
+                        amount: dist.amount * (banker.amount / activeLoan.amount)
+                    }));
+                }
+
+                // Crear el breakdown específico para esta inversión
+                const portionBreakdown = {
+                    total: dist.amount,
+                    capital: paymentBreakdown.capital * portionRatio,
+                    interest: paymentBreakdown.interest * portionRatio,
+                    technologyFee: paymentBreakdown.technologyFee * portionRatio,
+                };
+
+                // Usar la fecha simulada si existe, sino la fecha actual
+                const paymentDate = simulationDate ? Timestamp.fromDate(simulationDate) : Timestamp.now();
+                
+                const investmentData: Omit<Investment, 'id'> = {
+                    loanId: dist.loan.id,
+                    payingLoanId: activeLoan.id,
+                    payerId: user.uid,
+                    borrowerId: dist.loan.requesterId,
+                    amount: dist.amount,
+                    status: 'pending-confirmation',
+                    paymentProofUrl: proofUrl,
+                    createdAt: paymentDate,
+                    isRepayment: true,
+                    sourceBreakdown: sourceBreakdown,
+                    paymentBreakdown: portionBreakdown,
+                };
+
+                transaction.set(doc(collection(db, 'investments')), investmentData);
+
+                // Actualizar el préstamo receptor
+                const receivingLoanRef = doc(db, 'loanRequests', dist.loan.id);
+                const newCommittedAmount = (loanData.committedPercentage / 100 * loanData.amount) + dist.amount;
+                const newCommittedPercentage = Math.min(100, (newCommittedAmount / loanData.amount) * 100);
+                
+                transaction.update(receivingLoanRef, { 
+                    committedPercentage: newCommittedPercentage,
+                });
+            }
         });
 
         toast({
             title: 'Pago Enviado para Confirmación',
-            description: 'Tu pago ha sido registrado. El nuevo destinatario debe confirmar la transferencia.',
+            description: distributionToUse.length > 1 
+                ? `Tus ${distributionToUse.length} pagos han sido registrados. Los destinatarios deben confirmar las transferencias.`
+                : 'Tu pago ha sido registrado. El destinatario debe confirmar la transferencia.',
         });
 
     } catch (error) {
@@ -390,7 +549,8 @@ export default function PortalPage() {
     } finally {
         setIsRepaymentModalOpen(false);
         setPaymentBreakdown(null);
-        setNextLoanInQueue(null);
+        setPaymentDistribution([]);
+        setLoansInQueue([]);
     }
   };
 
@@ -791,6 +951,31 @@ export default function PortalPage() {
            description: `Tu fecha de pago es el ${activeLoan.paymentDay} de cada mes. Próxima fecha: ${nextPaymentDateStr}.`,
            content: (
                <div className='w-full text-left space-y-4'>
+                    {/* Indicador de pago en proceso - basado en reserva activa en RTDB */}
+                    {hasActiveReservation && (
+                        <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                            <Timer className="h-5 w-5 text-amber-600 animate-pulse" />
+                            <div className="flex-1">
+                                <p className="text-sm font-semibold text-amber-800">Pago en proceso</p>
+                                <p className="text-xs text-amber-600">
+                                    Tienes una reserva activa. {reservationTimeRemaining > 0 && (
+                                        <span className="font-semibold">
+                                            {Math.floor(reservationTimeRemaining / 60)}:{(reservationTimeRemaining % 60).toString().padStart(2, '0')} restantes
+                                        </span>
+                                    )}
+                                </p>
+                            </div>
+                            <Button 
+                                size="sm" 
+                                variant="outline"
+                                className="border-amber-300 text-amber-700 hover:bg-amber-100"
+                                onClick={() => setIsRepaymentModalOpen(true)}
+                            >
+                                Continuar
+                            </Button>
+                        </div>
+                    )}
+                    
                     <Button asChild className='w-full' variant='outline'>
                         <Link href={detailLinkHref}>
                             <ListChecks className='mr-2 h-4 w-4' />
@@ -799,56 +984,104 @@ export default function PortalPage() {
                     </Button>
                     
                     {/* Sección de pago compacta */}
-                    <div className='w-full border rounded-lg p-3 space-y-3'>
-                        {/* Montos */}
-                        <div className="flex items-center justify-between text-sm">
-                            <div>
-                                <p className="text-xs text-muted-foreground">Cuota</p>
-                                <p className="font-semibold">{formatCurrency(overduePaymentAmount, 0)}</p>
-                            </div>
-                            <Separator orientation="vertical" className="h-8" />
-                            <div className="text-right">
-                                <p className="text-xs text-muted-foreground">Saldo total</p>
-                                <p className="font-semibold text-green-600">{formatCurrency(Math.ceil(totalPayoffAmount), 0)}</p>
-                            </div>
-                        </div>
+                    {(() => {
+                        // Calcular cuota de tecnología mínima acumulada hasta hoy
+                        const dailyTechFee = ((activeLoan.technologyFee || 8000) * 12) / 365;
+                        const today = simulationDate ? startOfDay(simulationDate) : startOfDay(new Date());
                         
-                        {/* Selector de monto */}
-                        <div className="space-y-2">
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground">$</span>
-                                <Input
-                                    type="text"
-                                    inputMode="numeric"
-                                    value={selectedPaymentAmount ? new Intl.NumberFormat('es-CO').format(selectedPaymentAmount) : new Intl.NumberFormat('es-CO').format(Math.ceil(overduePaymentAmount))}
-                                    onChange={(e) => {
-                                        const value = e.target.value.replace(/\D/g, '');
-                                        const numValue = parseInt(value) || 0;
-                                        setSelectedPaymentAmount(Math.min(numValue, Math.ceil(totalPayoffAmount)));
-                                    }}
-                                    className="h-8 text-center text-sm font-medium"
-                                />
-                            </div>
-                            <Slider
-                                value={[selectedPaymentAmount || Math.ceil(overduePaymentAmount)]}
-                                onValueChange={(value) => setSelectedPaymentAmount(value[0])}
-                                min={1000}
-                                max={Math.ceil(totalPayoffAmount)}
-                                step={1000}
-                                className="w-full"
-                            />
-                        </div>
+                        // Encontrar la fecha del último evento (última inversión o último pago)
+                        let lastEventDate = today;
+                        if (loanInvestments && loanInvestments.length > 0) {
+                            const sortedInvestments = [...loanInvestments].sort((a, b) => b.createdAt.seconds - a.createdAt.seconds);
+                            lastEventDate = startOfDay(fromUnixTime(sortedInvestments[0].createdAt.seconds));
+                        }
+                        // TODO: También considerar último pago si existe
                         
-                        {/* Botón pagar */}
-                        <Button 
-                            className='w-full h-9 text-sm'
-                            onClick={() => handlePaymentClick(selectedPaymentAmount || Math.ceil(overduePaymentAmount))}
-                            disabled={actionLoading}
-                        >
-                            {actionLoading ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Send className="mr-2 h-3 w-3" />}
-                            Pagar
-                        </Button>
-                    </div>
+                        const daysAccumulated = Math.max(1, differenceInDays(today, lastEventDate));
+                        const minPayment = Math.ceil(dailyTechFee * daysAccumulated); // Tech fee acumulado
+                        const maxPayment = totalPayoffAmount; // Saldo total EXACTO con decimales
+                        const sliderMax = Math.ceil(maxPayment); // Máximo del slider (redondeado hacia arriba)
+                        
+                        // isMaxSelected solo si el slider está exactamente en el tope
+                        const isMaxSelected = selectedPaymentAmount === sliderMax;
+                        // Si el input está vacío (0 o undefined), usar 0 para el efectivo
+                        const effectivePaymentAmount = isMaxSelected ? maxPayment : (selectedPaymentAmount ?? 0);
+                        const isValidPayment = effectivePaymentAmount >= minPayment;
+                        
+                        return (
+                            <div className='w-full border rounded-lg p-3 space-y-3'>
+                                {/* Montos - clickeables */}
+                                <div className="flex items-center justify-between text-sm">
+                                    <button 
+                                        type="button"
+                                        onClick={() => setSelectedPaymentAmount(Math.ceil(overduePaymentAmount))}
+                                        className="text-left hover:bg-muted/50 rounded p-1 -m-1 transition-colors"
+                                    >
+                                        <p className="text-xs text-muted-foreground">Cuota</p>
+                                        <p className="font-semibold">{formatCurrency(overduePaymentAmount, 0)}</p>
+                                    </button>
+                                    <Separator orientation="vertical" className="h-8" />
+                                    <button 
+                                        type="button"
+                                        onClick={() => setSelectedPaymentAmount(sliderMax)}
+                                        className="text-right hover:bg-muted/50 rounded p-1 -m-1 transition-colors"
+                                    >
+                                        <p className="text-xs text-muted-foreground">Saldo total</p>
+                                        <p className="font-semibold text-green-600">{formatCurrency(totalPayoffAmount, 2)}</p>
+                                    </button>
+                                </div>
+                                
+                                {/* Selector de monto */}
+                                <div className="space-y-2">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-muted-foreground">$</span>
+                                        <Input
+                                            type="text"
+                                            inputMode="numeric"
+                                            value={selectedPaymentAmount === sliderMax
+                                                ? new Intl.NumberFormat('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(maxPayment)
+                                                : selectedPaymentAmount !== undefined && selectedPaymentAmount !== null
+                                                    ? new Intl.NumberFormat('es-CO').format(selectedPaymentAmount)
+                                                    : ''
+                                            }
+                                            onChange={(e) => {
+                                                const value = e.target.value.replace(/\D/g, '');
+                                                if (value === '') {
+                                                    setSelectedPaymentAmount(0);
+                                                } else {
+                                                    const numValue = parseInt(value) || 0;
+                                                    setSelectedPaymentAmount(Math.min(numValue, sliderMax));
+                                                }
+                                            }}
+                                            className="h-8 text-center text-sm font-medium"
+                                            placeholder="0"
+                                        />
+                                    </div>
+                                    <Slider
+                                        value={[selectedPaymentAmount || 0]}
+                                        onValueChange={(value) => setSelectedPaymentAmount(value[0])}
+                                        min={0}
+                                        max={sliderMax}
+                                        step={1000}
+                                        className="w-full"
+                                    />
+                                    <p className="text-xs text-muted-foreground text-center">
+                                        Mín: {formatCurrency(minPayment, 0)} (tech fee {daysAccumulated} días)
+                                    </p>
+                                </div>
+                                
+                                {/* Botón pagar */}
+                                <Button 
+                                    className='w-full h-9 text-sm'
+                                    onClick={() => handlePaymentClick(effectivePaymentAmount)}
+                                    disabled={actionLoading || !isValidPayment}
+                                >
+                                    {actionLoading ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Send className="mr-2 h-3 w-3" />}
+                                    Pagar {effectivePaymentAmount > 0 ? formatCurrency(effectivePaymentAmount, isMaxSelected ? 2 : 0) : '$0'}
+                                </Button>
+                            </div>
+                        );
+                    })()}
                </div>
            )
        };
@@ -992,15 +1225,16 @@ export default function PortalPage() {
             </div>
         </div>
     </div>
-    {isRepaymentModalOpen && paymentBreakdown && nextLoanInQueue && user && activeLoan && (
+    {isRepaymentModalOpen && paymentBreakdown && paymentDistribution.length > 0 && user && activeLoan && (
         <RepaymentModal
             isOpen={isRepaymentModalOpen}
             onClose={() => setIsRepaymentModalOpen(false)}
             payingLoan={activeLoan}
             payingLoanBreakdown={paymentBreakdown}
-            receivingLoan={nextLoanInQueue}
-            onConfirm={(proofFile) => confirmRepayment(proofFile)}
+            paymentDistribution={paymentDistribution}
+            onConfirm={(proofFiles, finalDistribution, bankerReinvestAmounts) => confirmRepayment(proofFiles, finalDistribution, bankerReinvestAmounts)}
             bankers={bankersForModal}
+            loansInQueue={loansInQueue}
         />
     )}
     </>

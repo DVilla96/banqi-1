@@ -23,6 +23,7 @@ import AmortizationTable from '@/components/loans/amortization-table';
 import { SimulationContext } from '@/hooks/use-simulation-date';
 import { generatePreciseAmortizationSchedule } from '@/lib/financial-utils';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { BANQI_FEE_INVESTOR_ID } from '@/lib/constants';
 
 
 type ConfirmedInvestment = Investment & {
@@ -59,8 +60,6 @@ const formatDate = (date: Date | null | undefined) => {
     // No manual timezone adjustment needed if server and client handle dates correctly.
     return format(date, 'dd MMM yyyy', { locale: es });
 }
-
-const BANQI_FEE_INVESTOR_ID = 'banqi_platform_fee';
 
 
 export default function MyLoanDetailPage() {

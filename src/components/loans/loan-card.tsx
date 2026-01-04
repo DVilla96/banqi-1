@@ -174,7 +174,16 @@ export default function LoanCard({ loan }: LoanCardProps) {
     return (loan.interestRate * 0.7).toFixed(2);
   }, [loan.interestRate]);
 
+  // Verificar si el usuario es el dueño del préstamo
+  const isOwnLoan = useMemo(() => {
+    return user?.uid === loan.requesterId;
+  }, [user?.uid, loan.requesterId]);
+
   const handleInvestClick = () => {
+    if (isOwnLoan) {
+        // No debería llegar aquí si el botón está oculto, pero por seguridad
+        return;
+    }
     if (!profile?.idNumber) {
         setIsKycModalOpen(true);
     } else {
@@ -314,9 +323,14 @@ export default function LoanCard({ loan }: LoanCardProps) {
                 </div>
             )}
             
-            {amountToFund > 0 && (
+            {amountToFund > 0 && !isOwnLoan && (
                 <div className="text-center mt-2">
                     <Button size="lg" className="bg-accent text-accent-foreground hover:bg-accent/90" onClick={handleInvestClick}>Invertir</Button>
+                </div>
+            )}
+            {isOwnLoan && (
+                <div className="text-center mt-2">
+                    <p className="text-sm text-muted-foreground italic">No puedes invertir en tu propio préstamo</p>
                 </div>
             )}
         </CardFooter>

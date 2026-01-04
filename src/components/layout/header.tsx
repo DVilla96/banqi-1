@@ -18,6 +18,7 @@ import {
   CheckCircle,
   DollarSign,
   ListOrdered,
+  FlaskConical,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -159,6 +160,12 @@ export default function Header() {
                         <Link href="/admin/queue">
                             <ListOrdered className="mr-2 h-4 w-4" />
                             <span>Cola de Fondeo</span>
+                        </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                        <Link href="/admin/test-tools">
+                            <FlaskConical className="mr-2 h-4 w-4" />
+                            <span>Zona de Pruebas</span>
                         </Link>
                     </DropdownMenuItem>
                   </>

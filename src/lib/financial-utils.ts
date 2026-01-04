@@ -2,6 +2,7 @@
 
 import type { Loan, Investment, Payment, AmortizationRow, PaymentBreakdown } from '@/lib/types';
 import { differenceInDays, addMonths, setDate, startOfDay, fromUnixTime, addDays } from 'date-fns';
+import { MONTHLY_TECHNOLOGY_FEE } from '@/lib/constants';
 
 const round = (num: number) => Math.round(num * 100) / 100;
 
@@ -67,7 +68,7 @@ export function calculatePayoffBalance(
     const daysSinceLastInvestment = differenceInDays(today, lastInvestmentDate);
     
     // Tech fee mensual se convierte a diario: (tarifa_mensual * 12) / 365
-    const dailyTechFee = ((loan.technologyFee || 8000) * 12) / 365;
+    const dailyTechFee = ((loan.technologyFee || MONTHLY_TECHNOLOGY_FEE) * 12) / 365;
     const techFee = daysSinceLastInvestment > 0 ? dailyTechFee * daysSinceLastInvestment : 0;
     
     // Restar tech fee ya pagado en payments
@@ -204,7 +205,7 @@ export function generatePreciseAmortizationSchedule(loan: Loan, investments: Inv
     const monthlyRate = loan.interestRate / 100;
     // Fórmula Excel: (1 + tasa_mensual)^(12/365) - 1
     const dailyRate = Math.pow(1 + monthlyRate, 12 / 365) - 1;
-    const dailyTechnologyFee = ((loan.technologyFee || 8000) * 12) / 365;
+    const dailyTechnologyFee = ((loan.technologyFee || MONTHLY_TECHNOLOGY_FEE) * 12) / 365;
     
     const schedule: AmortizationRow[] = [];
     const sortedInvestments = [...investments].sort((a, b) => a.createdAt.seconds - b.createdAt.seconds);
@@ -370,17 +371,72 @@ export function generatePreciseAmortizationSchedule(loan: Loan, investments: Inv
 
     const today = simulationDate ? startOfDay(simulationDate) : startOfDay(new Date());
     let firstUnpaidFound = false;
-    let remainingPaidAmount = payments.reduce((sum, p) => sum + p.amount, 0);
+    
+    // Ordenar pagos por fecha
+    const sortedPayments = [...payments].sort((a, b) => {
+        const dateA = a.paymentDate?.seconds ? a.paymentDate.seconds : 0;
+        const dateB = b.paymentDate?.seconds ? b.paymentDate.seconds : 0;
+        return dateA - dateB;
+    });
+    
+    // Asociar pagos a cada período de cuota
+    // Un pago pertenece a la cuota N si su fecha está entre la fecha de cuota N-1 y la fecha de cuota N
+    const paymentSchedule = schedule.filter(row => row.type === 'payment');
+    const paymentsPerPeriod: Map<number, Payment[]> = new Map();
+    
+    sortedPayments.forEach(payment => {
+        if (!payment.paymentDate?.seconds) return;
+        const paymentDate = startOfDay(fromUnixTime(payment.paymentDate.seconds));
+        
+        // Encontrar a qué período pertenece este pago
+        for (let i = 0; i < paymentSchedule.length; i++) {
+            const currentDueDate = startOfDay(new Date(paymentSchedule[i].date));
+            const previousDueDate = i === 0 
+                ? startOfDay(fromUnixTime(investments[investments.length - 1]?.createdAt?.seconds || 0))
+                : startOfDay(new Date(paymentSchedule[i - 1].date));
+            
+            // El pago pertenece a este período si está después de la cuota anterior y hasta la cuota actual
+            if (paymentDate > previousDueDate && paymentDate <= currentDueDate) {
+                const periodNum = i + 1;
+                if (!paymentsPerPeriod.has(periodNum)) {
+                    paymentsPerPeriod.set(periodNum, []);
+                }
+                paymentsPerPeriod.get(periodNum)!.push(payment);
+                break;
+            }
+            
+            // Si es después de la última cuota programada, asignarlo a la última
+            if (i === paymentSchedule.length - 1 && paymentDate > currentDueDate) {
+                const periodNum = i + 1;
+                if (!paymentsPerPeriod.has(periodNum)) {
+                    paymentsPerPeriod.set(periodNum, []);
+                }
+                paymentsPerPeriod.get(periodNum)!.push(payment);
+            }
+        }
+    });
 
+    // Calcular saldo real basándose en pagos reales
+    let realBalance = simpleCapitalBalance;
+    
     const finalSchedule = schedule.map(row => {
         if (row.type !== 'payment') return row;
 
+        const periodNum = parseInt(row.period);
         const dueDate = startOfDay(new Date(row.date));
-        let isPaid = false;
-        if (remainingPaidAmount >= round(row.flow)) {
-            isPaid = true;
-            remainingPaidAmount -= round(row.flow);
-        }
+        const periodPayments = paymentsPerPeriod.get(periodNum) || [];
+        
+        // Sumar todos los pagos de este período
+        const actualPaymentData = periodPayments.length > 0 ? {
+            date: fromUnixTime(periodPayments[0].paymentDate.seconds).toISOString(),
+            amount: periodPayments.reduce((sum, p) => sum + p.amount, 0),
+            capital: periodPayments.reduce((sum, p) => sum + (p.capital || 0), 0),
+            interest: periodPayments.reduce((sum, p) => sum + (p.interest || 0), 0),
+            technologyFee: periodPayments.reduce((sum, p) => sum + (p.technologyFee || 0), 0),
+            lateFee: periodPayments.reduce((sum, p) => sum + (p.lateFee || 0), 0),
+        } : undefined;
+        
+        const isPaid = actualPaymentData && actualPaymentData.amount > 0;
         const isOverdue = !isPaid && today > dueDate;
         let isNextDue = false;
         if (!isPaid && !isOverdue && !firstUnpaidFound) {
@@ -388,7 +444,20 @@ export function generatePreciseAmortizationSchedule(loan: Loan, investments: Inv
             firstUnpaidFound = true;
         }
 
-        return { ...row, isPaid, isOverdue, isNextDue };
+        // Si hay pago real, actualizar el saldo con el capital real pagado
+        if (actualPaymentData) {
+            realBalance = realBalance - actualPaymentData.capital;
+        }
+
+        return { 
+            ...row, 
+            isPaid, 
+            isOverdue, 
+            isNextDue,
+            actualPayment: actualPaymentData,
+            // Si hay pago real, mostrar el saldo real
+            balance: actualPaymentData ? round(Math.max(0, realBalance)) : row.balance,
+        };
     });
     
     return { schedule: finalSchedule, isProjection };
@@ -414,22 +483,10 @@ export function calculatePrecisePaymentBreakdown(
     
     const paymentDueDate = startOfDay(new Date(nextPaymentRow.date));
     
-    // If paying on or after the due date, use the schedule values directly
-    if (today >= paymentDueDate) {
-        return {
-            capital: nextPaymentRow.principal,
-            interest: nextPaymentRow.interest,
-            technologyFee: nextPaymentRow.technologyFee,
-            lateFee: 0,
-            total: nextPaymentRow.flow,
-            paymentDate: paymentDueDate.toISOString()
-        };
-    }
-    
-    // Paying BEFORE the due date - calculate prorated values
+    // Calcular valores prorrateados basados en la fecha actual
     const monthlyRate = loan.interestRate / 100;
     const dailyRate = Math.pow(1 + monthlyRate, 12 / 365) - 1;
-    const dailyTechnologyFee = (loan.technologyFee || 8000) * 12 / 365;
+    const dailyTechnologyFee = (loan.technologyFee || MONTHLY_TECHNOLOGY_FEE) * 12 / 365;
     
     // Determine if this is the first payment (no previous payments have been made)
     const isFirstPayment = !schedule.some(row => row.type === 'payment' && row.isPaid);
@@ -501,19 +558,39 @@ export function calculatePrecisePaymentBreakdown(
         techFeeToToday = dailyTechnologyFee * daysToToday;
     }
     
-    // The total payment is always the fixed installment amount (cuota fija)
-    const fixedInstallment = nextPaymentRow.flow;
+    // El pago seleccionado por el usuario
+    const selectedPayment = totalPaymentAmount;
     
-    // Capital adjusts to complete the fixed installment
-    // Capital = Cuota Fija - Interés - Tech Fee
-    const adjustedCapital = fixedInstallment - interestToToday - techFeeToToday;
+    // Orden de prioridad: 1) Tech Fee, 2) Intereses, 3) Capital
+    // El pago primero cubre tech fee, luego intereses, y el resto va a capital
+    
+    let actualTechFee: number;
+    let actualInterest: number;
+    let actualCapital: number;
+    
+    if (selectedPayment <= techFeeToToday) {
+        // El pago solo alcanza para cubrir parte o todo el tech fee
+        actualTechFee = selectedPayment;
+        actualInterest = 0;
+        actualCapital = 0;
+    } else if (selectedPayment <= techFeeToToday + interestToToday) {
+        // El pago cubre todo el tech fee y parte de los intereses
+        actualTechFee = techFeeToToday;
+        actualInterest = selectedPayment - techFeeToToday;
+        actualCapital = 0;
+    } else {
+        // El pago cubre tech fee, intereses, y algo de capital
+        actualTechFee = techFeeToToday;
+        actualInterest = interestToToday;
+        actualCapital = selectedPayment - techFeeToToday - interestToToday;
+    }
     
     return {
-        capital: round(adjustedCapital),
-        interest: round(interestToToday),
-        technologyFee: round(techFeeToToday),
+        capital: round(Math.max(0, actualCapital)),
+        interest: round(actualInterest),
+        technologyFee: round(actualTechFee),
         lateFee: 0, 
-        total: round(fixedInstallment),
+        total: round(selectedPayment),
         paymentDate: today.toISOString()
     };
 }

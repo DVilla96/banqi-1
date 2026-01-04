@@ -105,13 +105,22 @@ export type AmortizationRow = {
   period: string;
   date: string;
   type: 'disbursement' | 'payment' | 'capitalization';
-  flow: number;
-  interest: number;
-  principal: number;
+  flow: number; // Cuota proyectada
+  interest: number; // Interés proyectado
+  principal: number; // Capital proyectado
   technologyFee: number;
   balance: number;
   isPaid?: boolean;
   isOverdue?: boolean;
   isNextDue?: boolean;
   details?: any;
+  // Campos para pagos reales
+  actualPayment?: {
+    date: string; // Fecha real del pago
+    amount: number; // Monto total pagado
+    capital: number;
+    interest: number;
+    technologyFee: number;
+    lateFee: number;
+  };
 };

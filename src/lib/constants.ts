@@ -1,4 +1,12 @@
 import type { NavLink, Investment, ChartData, OverviewCard } from './types';
+import { LayoutDashboard, Wallet, Landmark, Settings, FlaskConical } from 'lucide-react';
+
+export const NAV_LINKS: NavLink[] = [
+    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { href: '/my-investments', label: 'Mis Inversiones', icon: Wallet },
+    { href: '/loans', label: 'Préstamos', icon: Landmark },
+    { href: '/admin/test-tools', label: 'Zona de Pruebas', icon: FlaskConical },
+];
 
 export const OVERVIEW_CARDS_DATA: OverviewCard[] = [
     { title: "Inversión Total", value: "$75.231.890", change: "+20.1% desde el mes pasado", icon: "trendingUp" },
@@ -24,3 +32,28 @@ export const RECENT_INVESTMENTS_DATA: Investment[] = [
   { id: "INV004", loanId: "LN321", amount: 450000, borrower: "William Kim", date: "2023-11-10", status: "Activo" },
   { id: "INV005", loanId: "LN654", amount: 550000, borrower: "Sofia Davis", date: "2023-11-01", status: "Pagado" },
 ];
+
+// ============================================
+// CONSTANTES DE FEES DEL SISTEMA (VALORES POR DEFECTO)
+// ============================================
+// NOTA: Estos son valores por defecto. El valor real se define
+// por crédito individual cuando el admin envía la oferta.
+
+/**
+ * Fee de estudio de crédito / desembolso por defecto (COP)
+ * Este valor se cobra al deudor y es fondeado inicialmente por Banqi.
+ * El admin puede personalizarlo por cada crédito en la evaluación.
+ */
+export const DISBURSEMENT_FEE = 25000;
+
+/**
+ * Fee de tecnología mensual por defecto (COP)
+ * Se cobra mensualmente como parte de cada cuota.
+ * El admin puede personalizarlo por cada crédito en la evaluación.
+ */
+export const MONTHLY_TECHNOLOGY_FEE = 8000;
+
+/**
+ * ID del inversor virtual de Banqi para fees de plataforma
+ */
+export const BANQI_FEE_INVESTOR_ID = 'banqi_platform_fee';

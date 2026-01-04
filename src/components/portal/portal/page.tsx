@@ -26,6 +26,7 @@ import { Label } from '@/components/ui/label';
 import RepaymentModal from '@/components/portal/repayment-modal';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { BANQI_FEE_INVESTOR_ID } from '@/lib/constants';
 
 
 type ActiveLoanRequest = Loan & {
@@ -41,8 +42,6 @@ const formatCurrency = (value: number, decimals = 0) => {
       minimumFractionDigits: decimals,
     }).format(value);
 };
-
-const BANQI_FEE_INVESTOR_ID = 'banqi_platform_fee';
 
 
 export default function PortalPage() {

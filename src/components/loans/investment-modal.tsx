@@ -24,6 +24,7 @@ import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import type { Loan } from '@/lib/types';
 import { Separator } from '../ui/separator';
 import { Card, CardContent, CardHeader } from '../ui/card';
+import { parseISO } from 'date-fns';
 
 type InvestmentModalProps = {
   isOpen: boolean;
@@ -331,7 +332,8 @@ export default function InvestmentModal({ isOpen, onClose, loan, investorId }: I
         let createdAtTimestamp: Timestamp;
         if (investmentDate) {
             const now = new Date();
-            const selectedDate = new Date(investmentDate);
+            // parseISO interpreta la fecha en zona horaria local, no UTC
+            const selectedDate = parseISO(investmentDate);
             selectedDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
             createdAtTimestamp = Timestamp.fromDate(selectedDate);
         } else {
@@ -577,19 +579,29 @@ export default function InvestmentModal({ isOpen, onClose, loan, investorId }: I
                 
                 <Separator />
                 
-                {/* Paso 2: Transferencia */}
-                <div className={`space-y-1 ${reservationStatus !== 'reserved' && reservationStatus !== 'confirming' ? 'opacity-50 pointer-events-none' : ''}`}>
+                {/* Paso 2: Transferencia - Solo mostrar datos cuando hay reserva */}
+                <div className={`space-y-1 ${reservationStatus !== 'reserved' && reservationStatus !== 'confirming' ? 'opacity-50' : ''}`}>
                     <p className="font-semibold text-sm">2. Realiza la transferencia</p>
-                    <Alert className='border-primary/50 py-2'>
-                        <Landmark className="h-3 w-3" />
-                        <AlertTitle className="font-bold text-xs">Datos de la Cuenta del Solicitante</AlertTitle>
-                        <AlertDescription className='space-y-0.5 pt-1 text-xs'>
-                            <div className="flex justify-between"><span>Nombre:</span> <span className="font-medium">{loan.requesterFirstName} {loan.requesterLastName}</span></div>
-                            <div className="flex justify-between"><span>Banco:</span> <span className="font-medium">{loan.bankName || 'N/A'}</span></div>
-                            <div className="flex justify-between"><span>Tipo de Cuenta:</span> <span className="font-medium">{loan.accountType || 'N/A'}</span></div>
-                            <div className="flex justify-between"><span>Número de Cuenta:</span> <span className="font-medium">{loan.accountNumber || 'N/A'}</span></div>
-                        </AlertDescription>
-                    </Alert>
+                    {(reservationStatus === 'reserved' || reservationStatus === 'confirming') ? (
+                        <Alert className='border-primary/50 py-2'>
+                            <Landmark className="h-3 w-3" />
+                            <AlertTitle className="font-bold text-xs">Datos de la Cuenta del Solicitante</AlertTitle>
+                            <AlertDescription className='space-y-0.5 pt-1 text-xs'>
+                                <div className="flex justify-between"><span>Nombre:</span> <span className="font-medium">{loan.requesterFirstName} {loan.requesterLastName}</span></div>
+                                <div className="flex justify-between"><span>Banco:</span> <span className="font-medium">{loan.bankName || 'N/A'}</span></div>
+                                <div className="flex justify-between"><span>Tipo de Cuenta:</span> <span className="font-medium">{loan.accountType || 'N/A'}</span></div>
+                                <div className="flex justify-between"><span>Número de Cuenta:</span> <span className="font-medium">{loan.accountNumber || 'N/A'}</span></div>
+                            </AlertDescription>
+                        </Alert>
+                    ) : (
+                        <Alert className='border-muted py-2 bg-muted/30'>
+                            <Lock className="h-3 w-3 text-muted-foreground" />
+                            <AlertTitle className="font-bold text-xs text-muted-foreground">Datos de la Cuenta</AlertTitle>
+                            <AlertDescription className='text-xs text-muted-foreground'>
+                                Reserva tu cupo primero para ver los datos bancarios del solicitante.
+                            </AlertDescription>
+                        </Alert>
+                    )}
                 </div>
 
                 {/* Paso 3: Comprobante */}

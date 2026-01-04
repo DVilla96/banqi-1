@@ -14,10 +14,11 @@ import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { Separator } from '../ui/separator';
 import React from 'react';
-import { format } from 'date-fns';
+import { format, fromUnixTime } from 'date-fns';
 import { es } from 'date-fns/locale';
 import PromissoryNoteModal from './promissory-note-modal';
 import { Badge } from '../ui/badge';
+import { BANQI_FEE_INVESTOR_ID } from '@/lib/constants';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,8 +30,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-
-const BANQI_FEE_INVESTOR_ID = 'banqi_platform_fee';
 
 
 type PendingConfirmationsProps = {
@@ -85,6 +84,11 @@ export default function PendingConfirmations({ loanId, borrowerId }: PendingConf
             const investments: EnrichedInvestment[] = [];
             for (const investmentDoc of docs) {
                 const data = investmentDoc.data() as Investment;
+                console.log("[PendingConfirmations] Investment loaded:", investmentDoc.id, {
+                    isRepayment: data.isRepayment,
+                    sourceBreakdown: data.sourceBreakdown,
+                    sourceBreakdownLength: Array.isArray(data.sourceBreakdown) ? data.sourceBreakdown.length : 'not array'
+                });
                 let investorFirstName = 'Inversionista';
                 let investorLastName = '';
                 let investorName = 'Inversionista Anónimo';
@@ -152,11 +156,21 @@ export default function PendingConfirmations({ loanId, borrowerId }: PendingConf
             const loanRef = doc(db, 'loanRequests', investment.loanId);
             const pendingInvestmentRef = doc(db, 'investments', investment.id);
 
+            // === FASE DE LECTURAS (todas las lecturas primero) ===
             const loanDoc = await transaction.get(loanRef);
             if (!loanDoc.exists()) {
                 throw new Error("El préstamo ya no existe.");
             }
 
+            // Si es un repago, también necesitamos leer el préstamo del pagador
+            let payingLoanDoc = null;
+            let payingLoanRef = null;
+            if (investment.isRepayment && investment.payingLoanId) {
+                payingLoanRef = doc(db, 'loanRequests', investment.payingLoanId);
+                payingLoanDoc = await transaction.get(payingLoanRef);
+            }
+
+            // === FASE DE ESCRITURAS (todas las escrituras después) ===
             const loanData = loanDoc.data();
             const amountToConfirm = investment.amount;
             const currentFunded = loanData.amount * ((loanData.fundedPercentage || 0) / 100);
@@ -171,7 +185,7 @@ export default function PendingConfirmations({ loanId, borrowerId }: PendingConf
                     const paymentData: Omit<Payment, 'id'> = {
                         loanId: investment.payingLoanId,
                         payerId: investment.payerId,
-                        paymentDate: Timestamp.now(), // Use server timestamp
+                        paymentDate: investment.createdAt, // Use the payment date from when the repayment was made (supports simulation date)
                         amount: investment.paymentBreakdown.total,
                         capital: investment.paymentBreakdown.capital,
                         interest: investment.paymentBreakdown.interest,
@@ -180,10 +194,8 @@ export default function PendingConfirmations({ loanId, borrowerId }: PendingConf
                     };
                     transaction.set(doc(collection(db, 'payments')), paymentData);
                     
-                    // Update the paying loan status if it was overdue
-                    const payingLoanRef = doc(db, 'loanRequests', investment.payingLoanId);
-                    const payingLoanDoc = await transaction.get(payingLoanRef);
-                    if (payingLoanDoc.exists() && payingLoanDoc.data().status === 'repayment-overdue') {
+                    // Update the paying loan status if it was overdue (ya lo leímos arriba)
+                    if (payingLoanDoc && payingLoanDoc.exists() && payingLoanDoc.data().status === 'repayment-overdue' && payingLoanRef) {
                         transaction.update(payingLoanRef, { status: 'repayment-active' });
                     }
 
@@ -267,10 +279,27 @@ export default function PendingConfirmations({ loanId, borrowerId }: PendingConf
     }
 
     const openConfirmationModal = async (investment: EnrichedInvestment) => {
+        console.log("[PendingConfirmations] Opening modal for:", investment.id);
+        console.log("[PendingConfirmations] isRepayment:", investment.isRepayment);
+        console.log("[PendingConfirmations] sourceBreakdown (raw):", investment.sourceBreakdown);
+        
+        // Normalizar sourceBreakdown: Firebase a veces devuelve objetos en lugar de arrays
+        let sourceBreakdown: ReinvestmentSource[] = [];
+        if (investment.sourceBreakdown) {
+            if (Array.isArray(investment.sourceBreakdown)) {
+                sourceBreakdown = investment.sourceBreakdown;
+            } else if (typeof investment.sourceBreakdown === 'object') {
+                // Convertir objeto a array si Firebase lo devuelve como objeto
+                sourceBreakdown = Object.values(investment.sourceBreakdown);
+            }
+        }
+        console.log("[PendingConfirmations] sourceBreakdown (normalized):", JSON.stringify(sourceBreakdown));
+        
         // If it's a reinvestment, we need to fetch the underlying bankers
-        if (investment.isRepayment && investment.sourceBreakdown) {
+        if (investment.isRepayment && sourceBreakdown.length > 0) {
+            console.log("[PendingConfirmations] ✅ Using sourceBreakdown to build bankers list");
             const enrichedBankers = await Promise.all(
-                investment.sourceBreakdown.map(async (source: ReinvestmentSource) => {
+                sourceBreakdown.map(async (source: ReinvestmentSource) => {
                     let name = 'Banquero Anónimo';
                     let firstName = '';
                     let lastName = '';
@@ -286,12 +315,15 @@ export default function PendingConfirmations({ loanId, borrowerId }: PendingConf
                             name = `${data.firstName || ''} ${data.lastName || ''}`.trim();
                          }
                     }
+                    console.log("[PendingConfirmations] Enriched banker:", source.investorId, name, source.amount);
                     return { ...source, investorFirstName: firstName, investorLastName: lastName, investorName: name, id: source.investorId, loanId: investment.loanId } as EnrichedInvestment
                 })
             );
+            console.log("[PendingConfirmations] Final bankers:", enrichedBankers.map(b => ({ id: b.investorId, name: b.investorName, amount: b.amount })));
             setBankersForModal(enrichedBankers);
         } else {
-             setBankersForModal([investment]); // For direct investments, the banker is the investor
+            console.log("[PendingConfirmations] ❌ NOT using sourceBreakdown - using investment itself");
+            setBankersForModal([investment]); // For direct investments, the banker is the investor
         }
 
         setSelectedInvestment(investment);
@@ -329,7 +361,8 @@ export default function PendingConfirmations({ loanId, borrowerId }: PendingConf
                                 if (!investment.createdAt?.seconds) {
                                     return 'Fecha no disponible';
                                 }
-                                const date = new Date(investment.createdAt.seconds * 1000);
+                                // Usar fromUnixTime para convertir correctamente el timestamp
+                                const date = fromUnixTime(investment.createdAt.seconds);
                                 return format(date, 'dd MMM yyyy', { locale: es });
                             })();
 
@@ -410,16 +443,15 @@ export default function PendingConfirmations({ loanId, borrowerId }: PendingConf
             <CardContent>
                 <div className="space-y-2">
                     <TooltipProvider>
-                        {disputedInvestments.map((investment) => {
-                            const investmentDate = (() => {
+                         {disputedInvestments.map((investment) => {
+                             const investmentDate = (() => {
                                 if (!investment.createdAt?.seconds) {
                                     return 'Fecha no disponible';
                                 }
-                                const date = new Date(investment.createdAt.seconds * 1000);
+                                // Usar fromUnixTime para convertir correctamente el timestamp
+                                const date = fromUnixTime(investment.createdAt.seconds);
                                 return format(date, 'dd MMM yyyy', { locale: es });
-                            })();
-
-                            return (
+                            })();                            return (
                                 <div key={investment.id} className="p-3 bg-background rounded-lg border border-amber-500/30">
                                     <div className="flex items-center justify-between gap-4">
                                         <div className='flex-1 space-y-0.5'>

@@ -120,7 +120,7 @@ export default function PromissoryNoteModal({ isOpen, onClose, investment, banke
         const fetchAllData = async () => {
             if (!isOpen || !investment.loanId || bankers.length === 0) return;
             setLoadingData(true);
-            console.log("--- Promissory Note Modal ---");
+            console.log("[PromissoryNoteModal] Received bankers:", bankers.map(b => ({ investorId: b.investorId, name: b.investorName, amount: b.amount })));
 
             try {
                 // Fetch Loan Details
@@ -544,7 +544,7 @@ export default function PromissoryNoteModal({ isOpen, onClose, investment, banke
                 const amountInWords = numberToWords(bankerAmount).toLowerCase();
                 
                 return (
-                    <AccordionItem value={`item-${index}`} key={banker.id || index}>
+                    <AccordionItem value={`item-${index}`} key={`banker-${index}-${banker.investorId || banker.id || 'unknown'}`}>
                          <AccordionTrigger>
                             <div className='flex-1 flex justify-between items-center pr-4'>
                                 <p className="font-semibold flex items-center gap-2">

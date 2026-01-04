@@ -4,9 +4,9 @@
       "$loanId": {
         ".read": "auth != null",
         
-        "$investorId": {
-          ".write": "auth != null && auth.uid === $investorId",
-          ".validate": "newData.hasChildren(['investorId', 'amount', 'reservedAt', 'expiresAt']) && newData.child('investorId').val() === $investorId && newData.child('amount').isNumber() && newData.child('amount').val() > 0 && newData.child('reservedAt').isNumber() && newData.child('expiresAt').isNumber()"
+        "$odeinvId": {
+          ".write": "auth != null && auth.uid === $odeinvId",
+          ".validate": "newData.hasChildren(['amount', 'reservedAt', 'expiresAt']) && newData.child('amount').isNumber() && newData.child('amount').val() > 0 && newData.child('reservedAt').isNumber() && newData.child('expiresAt').isNumber() && ((newData.hasChild('investorId') && newData.child('investorId').val() === $odeinvId) || (newData.hasChild('odeinvId') && newData.child('odeinvId').val() === $odeinvId))"
         }
       }
     }

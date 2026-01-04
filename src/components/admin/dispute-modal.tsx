@@ -21,6 +21,7 @@ import { db } from '@/lib/firebase';
 import type { Investment } from '@/lib/types';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { BANQI_FEE_INVESTOR_ID } from '@/lib/constants';
 
 type DisputeModalProps = {
     isOpen: boolean;
@@ -31,6 +32,8 @@ type DisputeModalProps = {
 type EnrichedInvestment = Investment & {
     investorName?: string;
     investorPhoneNumber?: string;
+    payerName?: string; // Nombre del deudor que pagó (para reinversiones)
+    payerPhoneNumber?: string;
 };
 
 const formatCurrency = (value: number) => {
@@ -41,8 +44,6 @@ const formatCurrency = (value: number) => {
       maximumFractionDigits: 0,
     }).format(value);
 };
-
-const BANQI_FEE_INVESTOR_ID = 'banqi_platform_fee';
 
 
 export default function DisputeModal({ isOpen, onClose, request }: DisputeModalProps) {
@@ -57,7 +58,7 @@ export default function DisputeModal({ isOpen, onClose, request }: DisputeModalP
         const q = query(
             collection(db, 'investments'),
             where('loanId', '==', request.id),
-            where('status', 'in', ['disputed', 'pending-confirmation'])
+            where('status', '==', 'disputed')
         );
 
         const unsubscribe = onSnapshot(q, async (snapshot) => {
@@ -67,7 +68,23 @@ export default function DisputeModal({ isOpen, onClose, request }: DisputeModalP
                 const data = investmentDoc.data() as Investment;
                 let investorName = 'Inversionista';
                 let investorPhoneNumber = 'No disponible';
+                let payerName = '';
+                let payerPhoneNumber = 'No disponible';
 
+                // Si es una reinversión (pago de cuota), obtener datos del pagador
+                if (data.isRepayment && data.payerId) {
+                    try {
+                        const payerRef = doc(db, 'users', data.payerId);
+                        const payerSnap = await runTransaction(db, async (t) => t.get(payerRef));
+                        if (payerSnap.exists()) {
+                            const payerData = payerSnap.data();
+                            payerName = `${payerData.firstName || ''} ${payerData.lastName || ''}`.trim();
+                            payerPhoneNumber = payerData.phoneNumber || 'No disponible';
+                        }
+                    } catch (e) { console.error(e); }
+                }
+
+                // Obtener datos del inversionista (o el mismo pagador si no hay investorId separado)
                 if (data.investorId) {
                     try {
                         const userRef = doc(db, 'users', data.investorId);
@@ -79,7 +96,15 @@ export default function DisputeModal({ isOpen, onClose, request }: DisputeModalP
                         }
                     } catch (e) { console.error(e); }
                 }
-                investments.push({ id: investmentDoc.id, ...data, investorName, investorPhoneNumber });
+                
+                investments.push({ 
+                    id: investmentDoc.id, 
+                    ...data, 
+                    investorName, 
+                    investorPhoneNumber,
+                    payerName: payerName || investorName, // Fallback al investorName
+                    payerPhoneNumber: payerPhoneNumber
+                });
             }
             setDisputedInvestments(investments);
             if (investments.length === 0) {
@@ -166,9 +191,12 @@ export default function DisputeModal({ isOpen, onClose, request }: DisputeModalP
                             <FileWarning className="h-6 w-6" />
                         </div>
                         <div>
-                            <DialogTitle>Resolver Disputas de Inversión</DialogTitle>
+                            <DialogTitle>Resolver Disputas de {disputedInvestments[0]?.isRepayment ? 'Pago' : 'Inversión'}</DialogTitle>
                              <DialogDescription>
-                                Inversión de {disputedInvestments[0]?.investorName} para el préstamo de {request.userName}.
+                                {disputedInvestments[0]?.isRepayment 
+                                    ? `Pago de cuota de ${disputedInvestments[0]?.payerName} para el préstamo de ${request.userName}.`
+                                    : `Inversión de ${disputedInvestments[0]?.investorName} para el préstamo de ${request.userName}.`
+                                }
                             </DialogDescription>
                         </div>
                     </div>
@@ -188,18 +216,28 @@ export default function DisputeModal({ isOpen, onClose, request }: DisputeModalP
                                     : 'Fecha no disponible';
                                 
                                 const isDisputed = investment.status === 'disputed';
+                                const isRepayment = investment.isRepayment;
 
                                  return (
                                     <div key={investment.id} className={`p-4 rounded-lg border ${isDisputed ? 'bg-red-50' : 'bg-muted/50'}`}>
                                         
                                         <div className='grid grid-cols-2 gap-4 mb-4'>
                                             <div className='p-3 border-l-4 rounded-r-md bg-background'>
-                                                <p className='font-semibold flex items-center gap-2'><User className='h-4 w-4 text-muted-foreground' /> Inversionista:</p>
-                                                <p className='text-base'>{investment.investorName}</p>
-                                                <p className='text-sm text-muted-foreground flex items-center gap-2'><Phone className='h-3 w-3'/> {investment.investorPhoneNumber || 'Teléfono no disponible'}</p>
+                                                <p className='font-semibold flex items-center gap-2'>
+                                                    <User className='h-4 w-4 text-muted-foreground' /> 
+                                                    {isRepayment ? 'Pagador (Deudor):' : 'Inversionista:'}
+                                                </p>
+                                                <p className='text-base'>{isRepayment ? investment.payerName : investment.investorName}</p>
+                                                <p className='text-sm text-muted-foreground flex items-center gap-2'>
+                                                    <Phone className='h-3 w-3'/> 
+                                                    {isRepayment ? investment.payerPhoneNumber : investment.investorPhoneNumber || 'Teléfono no disponible'}
+                                                </p>
                                             </div>
                                              <div className='p-3 border-l-4 rounded-r-md bg-background'>
-                                                <p className='font-semibold flex items-center gap-2'><User className='h-4 w-4 text-muted-foreground' /> Deudor:</p>
+                                                <p className='font-semibold flex items-center gap-2'>
+                                                    <User className='h-4 w-4 text-muted-foreground' /> 
+                                                    {isRepayment ? 'Receptor (Deudor):' : 'Deudor:'}
+                                                </p>
                                                 <p className='text-base'>{request.userName}</p>
                                                 <p className='text-sm text-muted-foreground flex items-center gap-2'><Phone className='h-3 w-3'/> {request.userPhoneNumber || 'Teléfono no disponible'}</p>
                                             </div>
