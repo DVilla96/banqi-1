@@ -241,64 +241,95 @@ export default function MyLoanDetailPage() {
 
     const showDisbursementInfo = ['funding-active', 'funded', 'repayment-active', 'repayment-overdue', 'completed'].includes(loan.status);
 
+    const isCompleted = loan.status === 'completed';
+
     return (
-        <div className="space-y-8">
-            <div className='flex items-center justify-between'>
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Detalle de mi Préstamo</h1>
+        <div className="space-y-8 pb-12">
+            {/* Header con gradiente */}
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 p-8 text-white shadow-2xl">
+                <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10" />
+                <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
+                <div className="absolute -bottom-20 -left-20 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
+                
+                <div className='relative flex items-center justify-between'>
+                    <div>
+                        <p className="text-indigo-200 text-sm font-medium mb-1">Mi Préstamo</p>
+                        <h1 className="text-3xl font-bold tracking-tight">Detalle del Crédito</h1>
+                        {isCompleted && (
+                            <div className="mt-3 inline-flex items-center gap-2 bg-green-500/20 backdrop-blur-sm border border-green-400/30 rounded-full px-4 py-1.5">
+                                <span className="text-green-200 text-sm font-medium">✓ Préstamo Completado</span>
+                            </div>
+                        )}
+                    </div>
+                    <Button asChild variant='secondary' className="bg-white/20 hover:bg-white/30 backdrop-blur-sm border-white/20 text-white">
+                        <Link href={portalLinkHref}>← Volver al Portal</Link>
+                    </Button>
                 </div>
-                <Button asChild variant='outline'>
-                    <Link href={portalLinkHref}>Volver al Portal</Link>
-                </Button>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
-                <Card>
+            {/* Stats Cards */}
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
+                <Card className="group relative overflow-hidden border-0 shadow-lg bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 hover:shadow-xl transition-all duration-300">
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Monto Total</CardTitle>
-                        <Wallet className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm font-medium text-blue-700 dark:text-blue-300">Monto Total</CardTitle>
+                        <div className="p-2 rounded-full bg-blue-100 dark:bg-blue-800">
+                            <Wallet className="h-4 w-4 text-blue-600 dark:text-blue-300" />
+                        </div>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{formatCurrency(loan.amount, 0)}</div>
+                        <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">{formatCurrency(loan.amount, 0)}</div>
                     </CardContent>
                 </Card>
-                <Card>
+                <Card className="group relative overflow-hidden border-0 shadow-lg bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 hover:shadow-xl transition-all duration-300">
+                    <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-pink-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Tasa E.M.</CardTitle>
-                        <Percent className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm font-medium text-purple-700 dark:text-purple-300">Tasa E.M.</CardTitle>
+                        <div className="p-2 rounded-full bg-purple-100 dark:bg-purple-800">
+                            <Percent className="h-4 w-4 text-purple-600 dark:text-purple-300" />
+                        </div>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{loan.interestRate}%</div>
+                        <div className="text-2xl font-bold text-purple-900 dark:text-purple-100">{loan.interestRate}%</div>
                     </CardContent>
                 </Card>
-                <Card>
+                <Card className="group relative overflow-hidden border-0 shadow-lg bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 hover:shadow-xl transition-all duration-300">
+                    <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-orange-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Plazo</CardTitle>
-                        <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm font-medium text-amber-700 dark:text-amber-300">Plazo</CardTitle>
+                        <div className="p-2 rounded-full bg-amber-100 dark:bg-amber-800">
+                            <CalendarDays className="h-4 w-4 text-amber-600 dark:text-amber-300" />
+                        </div>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{loan.term} meses</div>
+                        <div className="text-2xl font-bold text-amber-900 dark:text-amber-100">{loan.term} meses</div>
                     </CardContent>
                 </Card>
-                <Card>
+                <Card className="group relative overflow-hidden border-0 shadow-lg bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 hover:shadow-xl transition-all duration-300">
+                    <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Recibido (Neto)</CardTitle>
-                        <Landmark className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm font-medium text-green-700 dark:text-green-300">Recibido (Neto)</CardTitle>
+                        <div className="p-2 rounded-full bg-green-100 dark:bg-green-800">
+                            <Landmark className="h-4 w-4 text-green-600 dark:text-green-300" />
+                        </div>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-green-600">{formatCurrency(netDisbursement, 0)}</div>
-                        <p className="text-xs text-muted-foreground">{`Fondeado: ${formatCurrency(totalFunded)} - Costo: ${formatCurrency(loan.disbursementFee || 0)}`}</p>
+                        <div className="text-2xl font-bold text-green-600 dark:text-green-400">{formatCurrency(netDisbursement, 0)}</div>
+                        <p className="text-xs text-green-600/70 dark:text-green-400/70">{`${formatCurrency(totalFunded)} - ${formatCurrency(loan.disbursementFee || 0)} costo`}</p>
                     </CardContent>
                 </Card>
                 {firstPaymentRow && (
-                    <Card>
+                    <Card className="group relative overflow-hidden border-0 shadow-lg bg-gradient-to-br from-indigo-50 to-violet-50 dark:from-indigo-900/20 dark:to-violet-900/20 hover:shadow-xl transition-all duration-300">
+                        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-violet-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Cuota Mensual</CardTitle>
-                            <Calculator className="h-4 w-4 text-muted-foreground" />
+                            <CardTitle className="text-sm font-medium text-indigo-700 dark:text-indigo-300">Cuota Mensual</CardTitle>
+                            <div className="p-2 rounded-full bg-indigo-100 dark:bg-indigo-800">
+                                <Calculator className="h-4 w-4 text-indigo-600 dark:text-indigo-300" />
+                            </div>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold text-primary">{formatCurrency(firstPaymentRow.flow, 0)}</div>
-                            <p className="text-xs text-muted-foreground">Tecnología: {formatCurrency(firstPaymentRow.technologyFee)}</p>
+                            <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{formatCurrency(firstPaymentRow.flow, 0)}</div>
+                            <p className="text-xs text-indigo-600/70 dark:text-indigo-400/70">Tech: {formatCurrency(firstPaymentRow.technologyFee)}</p>
                         </CardContent>
                     </Card>
                 )}
@@ -306,15 +337,17 @@ export default function MyLoanDetailPage() {
 
             {showDisbursementInfo && (
                 <Accordion type="single" collapsible className="w-full" defaultValue="item-1">
-                    <AccordionItem value="item-1">
-                        <AccordionTrigger>
-                            <h2 className="text-lg font-semibold flex items-center gap-2">
-                                <HandCoins className="h-5 w-5 text-primary" />
+                    <AccordionItem value="item-1" className="border rounded-xl overflow-hidden shadow-lg bg-white dark:bg-slate-900">
+                        <AccordionTrigger className="px-6 py-4 hover:no-underline hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                            <h2 className="text-lg font-semibold flex items-center gap-3">
+                                <div className="p-2 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-indigo-900 dark:to-purple-900">
+                                    <HandCoins className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                                </div>
                                 Desembolsos Recibidos y Pagarés
                             </h2>
                         </AccordionTrigger>
-                        <AccordionContent>
-                            <Card>
+                        <AccordionContent className="px-0">
+                            <div className="border-t dark:border-slate-700">
                                 <CardContent className='p-0'>
                                     <Table>
                                         <TableHeader>
@@ -347,13 +380,22 @@ export default function MyLoanDetailPage() {
                                         </TableBody>
                                     </Table>
                                 </CardContent>
-                            </Card>
+                            </div>
                         </AccordionContent>
                     </AccordionItem>
                 </Accordion>
             )}
 
-            <AmortizationTable loan={loan} investments={investments} payments={payments} simulationDate={simulationDate} />
+            {/* Tabla de Amortización con título */}
+            <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-full bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900 dark:to-teal-900">
+                        <Calculator className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <h2 className="text-lg font-semibold">Plan de Amortización</h2>
+                </div>
+                <AmortizationTable loan={loan} investments={investments} payments={payments} simulationDate={simulationDate} />
+            </div>
 
             {selectedInvestment && (
                 <PromissoryNoteModal

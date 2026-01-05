@@ -132,17 +132,40 @@ export default function AmortizationTable({ loan, investments, payments, simulat
         return null;
     }
 
+    // Filtrar filas: ocultar cuotas proyectadas después de que el saldo llegue a $0
+    const scheduleToShow = useMemo(() => {
+        let zeroBalanceReached = false;
+        return filteredAndAdaptedSchedule.filter((row) => {
+            if (zeroBalanceReached && row.type === 'payment' && !row.isPaid) {
+                return false; // Ocultar cuotas no pagadas después de saldo $0
+            }
+            if (row.balance <= 0 && row.type === 'payment') {
+                zeroBalanceReached = true;
+            }
+            return true;
+        });
+    }, [filteredAndAdaptedSchedule]);
+
+    const loanCompleted = scheduleToShow.some(row => row.balance <= 0 && row.isPaid);
+
     return (
-        <Card>
+        <Card className="overflow-hidden border-0 shadow-lg bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-800">
             {isProjection && (
-                <CardHeader className="p-4 pb-2">
-                    <p className="text-xs text-center text-muted-foreground italic">
-                        Este es un plan de pagos proyectado. Las fechas definitivas se confirmarán cuando el préstamo esté 100% fondeado.
+                <CardHeader className="p-4 pb-2 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-100 dark:border-amber-800">
+                    <p className="text-xs text-center text-amber-700 dark:text-amber-300 italic">
+                        ⏳ Este es un plan de pagos proyectado. Las fechas definitivas se confirmarán cuando el préstamo esté 100% fondeado.
+                    </p>
+                </CardHeader>
+            )}
+            {loanCompleted && (
+                <CardHeader className="p-4 pb-2 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-b border-green-100 dark:border-green-800">
+                    <p className="text-sm text-center text-green-700 dark:text-green-300 font-medium flex items-center justify-center gap-2">
+                        🎉 ¡Préstamo completado! Has saldado tu deuda exitosamente.
                     </p>
                 </CardHeader>
             )}
             <CardContent className="p-0">
-                <div className="overflow-x-auto max-h-[500px] rounded-md border">
+                <div className="overflow-x-auto max-h-[500px]">
                     <Table>
                         <TableHeader>
                             <TableRow>
@@ -164,20 +187,22 @@ export default function AmortizationTable({ loan, investments, payments, simulat
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {filteredAndAdaptedSchedule.map((row, index) => {
+                            {scheduleToShow.map((row, index) => {
                                 // Calcular interés Banqi (30%) e interés neto (70%) para inversionistas
                                 const interesBanqi = row.interest * 0.30;
                                 const interesNeto = row.interest * 0.70;
                                 const hasActualPayment = row.actualPayment && row.actualPayment.amount > 0;
+                                const isLastPaidRow = row.balance <= 0 && row.isPaid;
 
                                 return (
                                     <TableRow
                                         key={index}
-                                        className={cn('text-xs', {
-                                            'bg-muted/30 font-semibold': row.type === 'disbursement' || row.type === 'capitalization',
-                                            'bg-green-50 text-green-800 font-medium': row.isPaid,
-                                            'bg-red-50 text-red-800 font-semibold': row.isOverdue,
-                                            'bg-blue-50 text-blue-800 font-semibold': row.isNextDue,
+                                        className={cn('text-xs transition-colors', {
+                                            'bg-slate-50 dark:bg-slate-800/50 font-semibold': row.type === 'disbursement' || row.type === 'capitalization',
+                                            'bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 text-green-800 dark:text-green-200 font-medium': row.isPaid && !isLastPaidRow,
+                                            'bg-gradient-to-r from-green-100 to-emerald-100 dark:from-green-800/40 dark:to-emerald-800/40 text-green-900 dark:text-green-100 font-bold ring-2 ring-green-500/20': isLastPaidRow,
+                                            'bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-200 font-semibold': row.isOverdue,
+                                            'bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 font-semibold': row.isNextDue,
                                         })}
                                     >
                                         <TableCell className="font-medium">
