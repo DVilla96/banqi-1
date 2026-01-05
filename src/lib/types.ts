@@ -23,8 +23,8 @@ export type Loan = {
   disbursementFee?: number;
   technologyFee?: number;
   dataAiHint?: string;
-  
-  requesterId?: string; 
+
+  requesterId?: string;
   requesterFirstName?: string;
   requesterLastName?: string;
   requesterEmail?: string;
@@ -51,31 +51,31 @@ export type ReinvestmentSource = {
 export type Investment = {
   id: string;
   loanId: string;
-  investorId?: string; 
+  investorId?: string;
   borrowerId: string;
-  amount: number; 
+  amount: number;
   status: 'pending-confirmation' | 'confirmed' | 'disputed' | 'rejected_by_admin';
   paymentProofUrl: string;
   paymentProofContentType?: string;
-  createdAt: any; 
+  createdAt: any;
   confirmedAt?: any;
-  payerId?: string; 
-  payingLoanId?: string; 
-  isRepayment?: boolean; 
+  payerId?: string;
+  payingLoanId?: string;
+  isRepayment?: boolean;
   sourceBreakdown?: ReinvestmentSource[];
   paymentBreakdown?: Omit<PaymentBreakdown, 'details'>;
 };
 
 export type Payment = {
-    id: string;
-    loanId: string;
-    payerId: string;
-    paymentDate: any; // Timestamp
-    amount: number;
-    capital: number;
-    interest: number;
-    technologyFee: number;
-    lateFee: number;
+  id: string;
+  loanId: string;
+  payerId: string;
+  paymentDate: any; // Timestamp
+  amount: number;
+  capital: number;
+  interest: number;
+  technologyFee: number;
+  lateFee: number;
 }
 
 export type ChartData = {
@@ -92,13 +92,14 @@ export type OverviewCard = {
 };
 
 export type PaymentBreakdown = {
-    capital: number;
-    interest: number;
-    technologyFee: number;
-    lateFee: number;
-    total: number;
-    paymentDate?: string; // ISO date string of the payment date used for calculations
-    details?: any; // Keeping this for potential future use if needed
+  capital: number;
+  interest: number;
+  technologyFee: number;
+  lateFee: number;
+  total: number;
+  paymentDate?: string; // ISO date string of the payment date used for calculations
+  period?: number; // Period number being paid (1, 2, 3...)
+  details?: any; // Keeping this for potential future use if needed
 };
 
 export type AmortizationRow = {
