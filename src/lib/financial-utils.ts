@@ -450,7 +450,8 @@ export function generatePreciseAmortizationSchedule(loan: Loan, investments: Inv
                         capital: pCapital,
                         interest: pInterest,
                         technologyFee: pTech,
-                        lateFee: pLate
+                        lateFee: pLate,
+                        receiptUrl: p.receiptUrl
                     }
                 });
 

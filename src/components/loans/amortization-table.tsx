@@ -10,8 +10,7 @@ import { format, parseISO, fromUnixTime, differenceInDays, startOfDay } from 'da
 import { es } from 'date-fns/locale';
 import { Card, CardContent, CardHeader } from '../ui/card';
 import { cn } from '@/lib/utils';
-import { BadgeCheck, AlertTriangle } from 'lucide-react';
-
+import { BadgeCheck, AlertTriangle, Receipt } from 'lucide-react';
 
 const formatCurrency = (value: number) => {
     if (isNaN(value)) return '$0';
@@ -33,6 +32,7 @@ type AmortizationTableProps = {
 };
 
 export default function AmortizationTable({ loan, investments, payments, simulationDate, investorId, investmentId, investorParticipation }: AmortizationTableProps) {
+
 
     const amortizationDetails = useMemo(() => {
         console.log("[AMORTIZATION_TABLE] Generating general schedule...");
@@ -149,7 +149,7 @@ export default function AmortizationTable({ loan, investments, payments, simulat
     const loanCompleted = scheduleToShow.some(row => row.balance <= 0 && row.isPaid);
 
     return (
-        <Card className="overflow-hidden border-0 shadow-lg bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-800">
+        <Card className="overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-950">
             {isProjection && (
                 <CardHeader className="p-4 pb-2 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-100 dark:border-amber-800">
                     <p className="text-xs text-center text-amber-700 dark:text-amber-300 italic">
@@ -158,8 +158,8 @@ export default function AmortizationTable({ loan, investments, payments, simulat
                 </CardHeader>
             )}
             {loanCompleted && (
-                <CardHeader className="p-4 pb-2 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-b border-green-100 dark:border-green-800">
-                    <p className="text-sm text-center text-green-700 dark:text-green-300 font-medium flex items-center justify-center gap-2">
+                <CardHeader className="p-4 pb-2 bg-emerald-50 dark:bg-emerald-950/30 border-b border-emerald-100 dark:border-emerald-800">
+                    <p className="text-sm text-center text-emerald-700 dark:text-emerald-300 font-medium flex items-center justify-center gap-2">
                         🎉 ¡Préstamo completado! Has saldado tu deuda exitosamente.
                     </p>
                 </CardHeader>
@@ -170,8 +170,7 @@ export default function AmortizationTable({ loan, investments, payments, simulat
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Fecha</TableHead>
-                                <TableHead className='text-right'>Cuota</TableHead>
-                                {!investorParticipation && <TableHead className='text-right'>Pagado</TableHead>}
+                                <TableHead className='text-right'>{investorParticipation ? 'Inversión' : 'Cuota'}</TableHead>
                                 {investorParticipation ? (
                                     <>
                                         <TableHead className='text-right'>Interés Total</TableHead>
@@ -181,9 +180,10 @@ export default function AmortizationTable({ loan, investments, payments, simulat
                                 ) : (
                                     <TableHead className='text-right'>Interés</TableHead>
                                 )}
-                                <TableHead className='text-right'>Capital</TableHead>
                                 {!investorParticipation && <TableHead className='text-right'>Tecnología</TableHead>}
+                                <TableHead className='text-right'>Capital</TableHead>
                                 <TableHead className='text-right'>Saldo</TableHead>
+                                <TableHead className='text-right'>Comprobante</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -198,9 +198,10 @@ export default function AmortizationTable({ loan, investments, payments, simulat
                                     <TableRow
                                         key={index}
                                         className={cn('text-xs transition-colors', {
-                                            'bg-slate-50 dark:bg-slate-800/50 font-semibold': row.type === 'disbursement' || row.type === 'capitalization',
-                                            'bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 text-green-800 dark:text-green-200 font-medium': row.isPaid && !isLastPaidRow,
-                                            'bg-gradient-to-r from-green-100 to-emerald-100 dark:from-green-800/40 dark:to-emerald-800/40 text-green-900 dark:text-green-100 font-bold ring-2 ring-green-500/20': isLastPaidRow,
+                                            'bg-slate-50 dark:bg-slate-900/50 font-semibold': row.type === 'disbursement' || row.type === 'capitalization',
+                                            'bg-emerald-50/80 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-200 font-medium': row.isPaid && !isLastPaidRow,
+                                            // Make the last paid row (completion) very celebratory
+                                            'bg-gradient-to-r from-emerald-100 to-green-100 dark:from-emerald-900/40 dark:to-green-900/40 text-emerald-900 dark:text-emerald-100 font-bold ring-1 ring-emerald-500/30 shadow-sm': isLastPaidRow,
                                             'bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-200 font-semibold': row.isOverdue,
                                             'bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 font-semibold': row.isNextDue,
                                         })}
@@ -220,14 +221,15 @@ export default function AmortizationTable({ loan, investments, payments, simulat
                                                 </p>
                                             )}
                                         </TableCell>
-                                        <TableCell className={cn('text-right font-mono font-bold', { 'text-green-600': row.type === 'disbursement' && row.flow < 0, 'text-red-600': row.type === 'payment', 'text-amber-700': row.type === 'capitalization' && row.flow > 0, 'text-gray-500': row.flow === 0 })}>
-                                            {row.flow === 0 ? '-' : (row.flow > 0 ? formatCurrency(row.flow) : `-${formatCurrency(Math.abs(row.flow))}`)}
+
+                                        <TableCell className={cn('text-right font-mono font-bold', { 'text-green-600': row.type === 'disbursement' && row.flow < 0, 'text-red-600': row.type === 'payment' && !row.isPaid, 'text-emerald-700 dark:text-emerald-400': row.isPaid, 'text-amber-700': row.type === 'capitalization' && row.flow > 0, 'text-gray-500': row.flow === 0 })}>
+                                            {/* Merged Column Logic: Show Actual Payment if paid, otherwise Scheduled Flow */}
+                                            {hasActualPayment && row.actualPayment
+                                                ? formatCurrency(row.actualPayment.amount)
+                                                : (row.flow === 0 ? '-' : (row.flow > 0 ? formatCurrency(row.flow) : `-${formatCurrency(Math.abs(row.flow))}`))
+                                            }
                                         </TableCell>
-                                        {!investorParticipation && (
-                                            <TableCell className='text-right font-mono text-green-600 font-semibold'>
-                                                {hasActualPayment && row.actualPayment ? formatCurrency(row.actualPayment.amount) : '-'}
-                                            </TableCell>
-                                        )}
+
                                         {investorParticipation ? (
                                             <>
                                                 <TableCell className='text-right font-mono'>
@@ -243,26 +245,43 @@ export default function AmortizationTable({ loan, investments, payments, simulat
                                         ) : (
                                             <TableCell className={cn('text-right font-mono', { 'text-green-600': row.interest < 0 })}>
                                                 {hasActualPayment && row.actualPayment
-                                                    ? <span className="text-green-600">{formatCurrency(row.actualPayment.interest)}</span>
+                                                    ? <span className="text-emerald-600">{formatCurrency(row.actualPayment.interest)}</span>
                                                     : (row.interest !== 0 ? (row.interest > 0 ? formatCurrency(row.interest) : `-${formatCurrency(Math.abs(row.interest))}`) : '-')
                                                 }
                                             </TableCell>
                                         )}
-                                        <TableCell className={cn('text-right font-mono')}>
-                                            {hasActualPayment && row.actualPayment
-                                                ? <span className="text-green-600">{formatCurrency(row.actualPayment.capital)}</span>
-                                                : (row.principal > 0 ? formatCurrency(row.principal) : (row.principal < 0 ? `-${formatCurrency(Math.abs(row.principal))}` : '-'))
-                                            }
-                                        </TableCell>
+
                                         {!investorParticipation && (
                                             <TableCell className='text-right font-mono'>
                                                 {hasActualPayment && row.actualPayment
-                                                    ? <span className="text-green-600">{formatCurrency(row.actualPayment.technologyFee)}</span>
+                                                    ? <span className="text-emerald-600">{formatCurrency(row.actualPayment.technologyFee)}</span>
                                                     : (row.technologyFee > 0 ? formatCurrency(row.technologyFee) : '-')
                                                 }
                                             </TableCell>
                                         )}
+
+                                        <TableCell className={cn('text-right font-mono')}>
+                                            {hasActualPayment && row.actualPayment
+                                                ? <span className="text-emerald-600">{formatCurrency(row.actualPayment.capital)}</span>
+                                                : (row.principal > 0 ? formatCurrency(row.principal) : (row.principal < 0 ? `-${formatCurrency(Math.abs(row.principal))}` : '-'))
+                                            }
+                                        </TableCell>
+
                                         <TableCell className='text-right font-mono font-semibold'>{formatCurrency(row.balance)}</TableCell>
+
+                                        <TableCell className='text-right'>
+                                            {row.isPaid && row.actualPayment?.receiptUrl && (
+                                                <button
+                                                    onClick={() => {
+                                                        window.open(row.actualPayment?.receiptUrl, '_blank');
+                                                    }}
+                                                    className="inline-flex items-center justify-center p-1.5 rounded-full bg-white dark:bg-slate-800 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/50 hover:scale-105 transition-all shadow-sm border border-emerald-100 dark:border-emerald-800"
+                                                    title="Ver Comprobante"
+                                                >
+                                                    <Receipt className="h-3.5 w-3.5" />
+                                                </button>
+                                            )}
+                                        </TableCell>
                                     </TableRow>
                                 );
                             })}

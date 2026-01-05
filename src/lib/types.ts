@@ -76,6 +76,7 @@ export type Payment = {
   interest: number;
   technologyFee: number;
   lateFee: number;
+  receiptUrl?: string;
 }
 
 export type ChartData = {
@@ -123,5 +124,6 @@ export type AmortizationRow = {
     interest: number;
     technologyFee: number;
     lateFee: number;
+    receiptUrl?: string;
   };
 };
