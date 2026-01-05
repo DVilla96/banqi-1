@@ -1143,11 +1143,43 @@ export default function PortalPage() {
         }
 
         if (status === 'completed') {
+            // Calcular estadísticas para la tarjeta de celebración
+
+            // 1. Intereses Totales Pagados
+            const totalInterestPaid = loanPayments.reduce((sum, p) => sum + (p.interest || 0), 0);
+
+            // 2. Duración (Fecha Inicio vs Fecha Final/Hoy)
+            let startDate = activeLoan.startDate ? new Date(activeLoan.startDate) : null;
+            if (!startDate && loanInvestments.length > 0) {
+                // Fallback: usar la fecha de la primera inversión confirmada
+                const sorted = [...loanInvestments].sort((a, b) => a.createdAt.seconds - b.createdAt.seconds);
+                startDate = new Date(sorted[0].createdAt.seconds * 1000);
+            }
+
+            const endDate = simulationDate || new Date();
+            let durationStr = 'N/A';
+
+            if (startDate) {
+                const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                if (diffDays > 60) {
+                    const months = Math.floor(diffDays / 30);
+                    durationStr = `${months} meses`;
+                } else {
+                    durationStr = `${diffDays} días`;
+                }
+            }
+
             return {
                 icon: null, // Icon handled inside the component
                 title: '', // Title handled inside component
                 description: '',
-                content: <CelebrationCard />,
+                content: <CelebrationCard
+                    loanAmount={activeLoan.amount}
+                    duration={durationStr}
+                    interestPaid={totalInterestPaid}
+                />,
                 isFullCustom: true
             }
         }

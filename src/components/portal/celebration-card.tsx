@@ -8,9 +8,13 @@ import Link from 'next/link';
 import { Trophy, Star, Heart, ArrowRight, ShieldCheck } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
-export default function CelebrationCard() {
-    const [score, setScore] = useState(0);
+interface CelebrationCardProps {
+    loanAmount?: number;
+    duration?: string;
+    interestPaid?: number;
+}
 
+export default function CelebrationCard({ loanAmount, duration, interestPaid }: CelebrationCardProps) {
     useEffect(() => {
         // Trigger confetti on mount
         const duration = 3 * 1000;
@@ -31,22 +35,19 @@ export default function CelebrationCard() {
             confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });
         }, 250);
 
-        // Animate score
-        const scoreInterval = setInterval(() => {
-            setScore(prev => {
-                if (prev >= 850) {
-                    clearInterval(scoreInterval);
-                    return 850;
-                }
-                return prev + 10;
-            });
-        }, 20);
-
         return () => {
             clearInterval(interval);
-            clearInterval(scoreInterval);
         };
     }, []);
+
+    const formatCurrency = (val?: number) => {
+        if (val === undefined) return '-';
+        return new Intl.NumberFormat('es-CO', {
+            style: 'currency',
+            currency: 'COP',
+            maximumFractionDigits: 0
+        }).format(val);
+    };
 
     return (
         <Card className="w-full max-w-md overflow-hidden border-2 border-yellow-400/50 shadow-2xl bg-gradient-to-br from-purple-50 to-white dark:from-slate-900 dark:to-slate-800">
@@ -63,14 +64,6 @@ export default function CelebrationCard() {
                         className="relative mx-auto w-24 h-24 bg-gradient-to-br from-yellow-300 to-yellow-500 rounded-full flex items-center justify-center shadow-lg mb-4"
                     >
                         <Trophy className="w-12 h-12 text-white" />
-                        <motion.div
-                            className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-md"
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 1 }}
-                        >
-                            +50 XP
-                        </motion.div>
                     </motion.div>
 
                     <div className="space-y-2 relative z-10">
@@ -86,6 +79,27 @@ export default function CelebrationCard() {
                         </p>
                     </div>
 
+                    {/* Stats Grid */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.3 }}
+                        className="grid grid-cols-3 gap-2 py-2"
+                    >
+                        <div className="flex flex-col items-center p-2 bg-white/60 dark:bg-black/20 rounded-lg shadow-sm">
+                            <span className="text-xs text-muted-foreground font-medium">Monto Total</span>
+                            <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{formatCurrency(loanAmount)}</span>
+                        </div>
+                        <div className="flex flex-col items-center p-2 bg-white/60 dark:bg-black/20 rounded-lg shadow-sm">
+                            <span className="text-xs text-muted-foreground font-medium">Duración</span>
+                            <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{duration || '-'}</span>
+                        </div>
+                        <div className="flex flex-col items-center p-2 bg-white/60 dark:bg-black/20 rounded-lg shadow-sm">
+                            <span className="text-xs text-muted-foreground font-medium">Intereses</span>
+                            <span className="text-sm font-bold text-green-600 dark:text-green-400">{formatCurrency(interestPaid)}</span>
+                        </div>
+                    </motion.div>
+
                     {/* Trust Score Gamification */}
                     <motion.div
                         initial={{ opacity: 0, scale: 0.9 }}
@@ -98,18 +112,18 @@ export default function CelebrationCard() {
                                 <ShieldCheck className="w-4 h-4" />
                                 Nivel de Confianza
                             </span>
-                            <span className="text-2xl font-bold text-indigo-600">{score} pts</span>
+                            <span className="text-2xl font-bold text-indigo-600">Alta</span>
                         </div>
                         <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
                             <motion.div
                                 className="h-full bg-gradient-to-r from-yellow-400 to-orange-500"
                                 initial={{ width: 0 }}
-                                animate={{ width: "85%" }}
+                                animate={{ width: "100%" }}
                                 transition={{ duration: 1.5, ease: "easeOut" }}
                             />
                         </div>
                         <p className="text-xs text-left mt-2 text-muted-foreground">
-                            ¡Fantástico! Tu historial impecable aumenta tu capacidad de crédito futuro.
+                            ¡Fantástico! Tu historial impecable aumenta tu reputación en la comunidad.
                         </p>
                     </motion.div>
 
