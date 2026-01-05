@@ -12,9 +12,10 @@ interface CelebrationCardProps {
     loanAmount?: number;
     duration?: string;
     interestPaid?: number;
+    onViewDetails?: () => void;
 }
 
-export default function CelebrationCard({ loanAmount, duration, interestPaid }: CelebrationCardProps) {
+export default function CelebrationCard({ loanAmount, duration, interestPaid, onViewDetails }: CelebrationCardProps) {
     useEffect(() => {
         // Trigger confetti on mount
         const duration = 3 * 1000;
@@ -152,11 +153,17 @@ export default function CelebrationCard({ loanAmount, duration, interestPaid }: 
                                 <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
                             </Link>
                         </Button>
-                        <Button asChild variant="outline" className="flex-1 h-12 text-base border-2 hover:bg-purple-50 hover:text-purple-700 dark:hover:bg-purple-900/30">
-                            <Link href="/my-loan/history">
-                                Ver Historial
-                            </Link>
-                        </Button>
+                        {onViewDetails ? (
+                            <Button onClick={onViewDetails} variant="outline" className="flex-1 h-12 text-base border-2 hover:bg-purple-50 hover:text-purple-700 dark:hover:bg-purple-900/30">
+                                Ver Detalle
+                            </Button>
+                        ) : (
+                            <Button asChild variant="outline" className="flex-1 h-12 text-base border-2 hover:bg-purple-50 hover:text-purple-700 dark:hover:bg-purple-900/30">
+                                <Link href="/my-loan/history">
+                                    Ver Historial
+                                </Link>
+                            </Button>
+                        )}
                     </div>
                 </div>
             </CardContent>

@@ -40,10 +40,10 @@ type ConfirmedInvestment = Investment & {
 const formatCurrency = (value: number, decimals = 0) => {
     if (isNaN(value)) return '$0';
     return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      maximumFractionDigits: decimals,
-      minimumFractionDigits: decimals,
+        style: 'currency',
+        currency: 'COP',
+        maximumFractionDigits: decimals,
+        minimumFractionDigits: decimals,
     }).format(value);
 };
 
@@ -74,7 +74,7 @@ export default function MyLoanDetailPage() {
     const [payments, setPayments] = useState<Payment[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedInvestment, setSelectedInvestment] = useState<ConfirmedInvestment | null>(null);
-    
+
     useEffect(() => {
         const simDateParam = searchParams.get('simDate');
         if (simDateParam) {
@@ -102,7 +102,7 @@ export default function MyLoanDetailPage() {
 
                 const loanData = { id: loanSnap.id, ...loanSnap.data() } as Loan;
                 setLoan(loanData);
-                
+
                 const investmentsQuery = query(
                     collection(db, 'investments'),
                     where('loanId', '==', loanId),
@@ -123,7 +123,7 @@ export default function MyLoanDetailPage() {
 
                 const confirmedInvestments: ConfirmedInvestment[] = [];
                 for (const investDoc of investmentsSnapshot.docs) {
-                     const data = investDoc.data();
+                    const data = investDoc.data();
                     let investorFirstName = 'Inversionista';
                     let investorLastName = '';
                     let investorName = 'Inversionista Anónimo';
@@ -140,7 +140,7 @@ export default function MyLoanDetailPage() {
                             investorName = `${investorFirstName} ${investorLastName}`.trim();
                         }
                     }
-                    
+
                     confirmedInvestments.push({
                         id: investDoc.id,
                         ...(data as Investment),
@@ -149,9 +149,9 @@ export default function MyLoanDetailPage() {
                         investorLastName,
                     } as ConfirmedInvestment);
                 }
-                
-                const fetchedPayments: Payment[] = paymentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data()} as Payment));
-                
+
+                const fetchedPayments: Payment[] = paymentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Payment));
+
                 setInvestments(confirmedInvestments);
                 setPayments(fetchedPayments);
 
@@ -169,14 +169,14 @@ export default function MyLoanDetailPage() {
     }, [loanId, user, authLoading, router]);
 
     const totalFunded = useMemo(() => investments.reduce((acc, inv) => acc + inv.amount, 0), [investments]);
-    
+
     const { netDisbursement, amortizationDetails, participationData } = useMemo(() => {
         if (!loan) return { netDisbursement: 0, amortizationDetails: null, participationData: [] };
-        
+
         const details = generatePreciseAmortizationSchedule(loan, investments, payments, simulationDate);
-        
+
         // --- Correct Participation Calculation ---
-        let participationData: {id: string, participation: number}[] = [];
+        let participationData: { id: string, participation: number }[] = [];
         if (investments.length > 0 && loan.interestRate) {
             const dailyRate = Math.pow(1 + (loan.interestRate / 100), 1 / 30.4167) - 1;
             const focalDate = startOfDay(fromUnixTime(investments[0].createdAt.seconds));
@@ -187,7 +187,7 @@ export default function MyLoanDetailPage() {
                 const pv = inv.amount / Math.pow(1 + dailyRate, daysDiff);
                 return { id: inv.id, pv };
             });
-            
+
             const totalPresentValue = presentValues.reduce((acc, val) => acc + val.pv, 0);
 
             if (totalPresentValue > 0) {
@@ -197,7 +197,7 @@ export default function MyLoanDetailPage() {
                 }));
             }
         }
-        
+
         return {
             netDisbursement: Math.max(0, totalFunded - (loan.disbursementFee || 0)),
             amortizationDetails: details,
@@ -210,7 +210,7 @@ export default function MyLoanDetailPage() {
         if (!loan) return false;
         return totalFunded >= loan.amount;
     }, [loan, totalFunded]);
-    
+
     const portalLinkHref = useMemo(() => {
         let href = '/portal';
         if (simulationDate) {
@@ -223,7 +223,7 @@ export default function MyLoanDetailPage() {
     const handleViewPromissory = (investment: ConfirmedInvestment) => {
         setSelectedInvestment(investment);
     }
-    
+
     const firstPaymentRow = useMemo(() => amortizationDetails?.schedule.find(row => row.type === 'payment'), [amortizationDetails]);
 
     if (loading || authLoading) {
@@ -234,11 +234,11 @@ export default function MyLoanDetailPage() {
             </div>
         );
     }
-    
+
     if (!loan) {
         return <div className="text-center">No se pudo cargar la información del préstamo.</div>;
     }
-    
+
     const showDisbursementInfo = ['funding-active', 'funded', 'repayment-active', 'repayment-overdue', 'completed'].includes(loan.status);
 
     return (
@@ -253,7 +253,7 @@ export default function MyLoanDetailPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
-                 <Card>
+                <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Monto Total</CardTitle>
                         <Wallet className="h-4 w-4 text-muted-foreground" />
@@ -261,8 +261,8 @@ export default function MyLoanDetailPage() {
                     <CardContent>
                         <div className="text-2xl font-bold">{formatCurrency(loan.amount, 0)}</div>
                     </CardContent>
-                 </Card>
-                  <Card>
+                </Card>
+                <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Tasa E.M.</CardTitle>
                         <Percent className="h-4 w-4 text-muted-foreground" />
@@ -270,8 +270,8 @@ export default function MyLoanDetailPage() {
                     <CardContent>
                         <div className="text-2xl font-bold">{loan.interestRate}%</div>
                     </CardContent>
-                 </Card>
-                  <Card>
+                </Card>
+                <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Plazo</CardTitle>
                         <CalendarDays className="h-4 w-4 text-muted-foreground" />
@@ -279,19 +279,19 @@ export default function MyLoanDetailPage() {
                     <CardContent>
                         <div className="text-2xl font-bold">{loan.term} meses</div>
                     </CardContent>
-                 </Card>
-                 <Card>
+                </Card>
+                <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Recibido (Neto)</CardTitle>
                         <Landmark className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-green-600">{formatCurrency(netDisbursement, 0)}</div>
-                         <p className="text-xs text-muted-foreground">{`Fondeado: ${formatCurrency(totalFunded)} - Costo: ${formatCurrency(loan.disbursementFee || 0)}`}</p>
+                        <p className="text-xs text-muted-foreground">{`Fondeado: ${formatCurrency(totalFunded)} - Costo: ${formatCurrency(loan.disbursementFee || 0)}`}</p>
                     </CardContent>
-                 </Card>
-                 {firstPaymentRow && (
-                     <Card>
+                </Card>
+                {firstPaymentRow && (
+                    <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Cuota Mensual</CardTitle>
                             <Calculator className="h-4 w-4 text-muted-foreground" />
@@ -300,12 +300,12 @@ export default function MyLoanDetailPage() {
                             <div className="text-2xl font-bold text-primary">{formatCurrency(firstPaymentRow.flow, 0)}</div>
                             <p className="text-xs text-muted-foreground">Tecnología: {formatCurrency(firstPaymentRow.technologyFee)}</p>
                         </CardContent>
-                     </Card>
-                 )}
+                    </Card>
+                )}
             </div>
-            
-             {showDisbursementInfo && (
-                 <Accordion type="single" collapsible className="w-full" defaultValue="item-1">
+
+            {showDisbursementInfo && (
+                <Accordion type="single" collapsible className="w-full" defaultValue="item-1">
                     <AccordionItem value="item-1">
                         <AccordionTrigger>
                             <h2 className="text-lg font-semibold flex items-center gap-2">
@@ -314,9 +314,9 @@ export default function MyLoanDetailPage() {
                             </h2>
                         </AccordionTrigger>
                         <AccordionContent>
-                             <Card>
+                            <Card>
                                 <CardContent className='p-0'>
-                                     <Table>
+                                    <Table>
                                         <TableHeader>
                                             <TableRow>
                                                 <TableHead>Fecha</TableHead>
@@ -338,7 +338,7 @@ export default function MyLoanDetailPage() {
                                                         <TableCell className="text-right font-medium">{formatCurrency(investment.amount, 0)}</TableCell>
                                                         <TableCell className="text-right">
                                                             <Button variant='ghost' size='sm' onClick={() => handleViewPromissory(investment)}>
-                                                                <FileSignature className='h-4 w-4 mr-2'/> Ver
+                                                                <FileSignature className='h-4 w-4 mr-2' /> Ver
                                                             </Button>
                                                         </TableCell>
                                                     </TableRow>
@@ -353,14 +353,14 @@ export default function MyLoanDetailPage() {
                 </Accordion>
             )}
 
-            <AmortizationTable loan={loan} investments={investments} payments={payments} simulationDate={simulationDate}/>
-            
+            <AmortizationTable loan={loan} investments={investments} payments={payments} simulationDate={simulationDate} />
+
             {selectedInvestment && (
-                 <PromissoryNoteModal
+                <PromissoryNoteModal
                     isOpen={!!selectedInvestment}
                     onClose={() => setSelectedInvestment(null)}
                     investment={selectedInvestment}
-                    bankers={[{...selectedInvestment}]}
+                    bankers={[{ ...selectedInvestment }]}
                     isReadOnly
                 />
             )}
