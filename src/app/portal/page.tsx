@@ -1179,7 +1179,7 @@ export default function PortalPage() {
                     loanAmount={activeLoan.amount}
                     duration={durationStr}
                     interestPaid={totalInterestPaid}
-                    onViewDetails={() => setIsRepaymentModalOpen(true)}
+                    onViewDetails={() => router.push(`/my-loan/${activeLoan.id}`)}
                 />,
                 isFullCustom: true
             }
