@@ -268,7 +268,7 @@ export default function MyLoanDetailPage() {
             </div>
 
             {/* Stats Cards */}
-            <div className={`grid grid-cols-2 gap-4 md:grid-cols-3 ${firstPaymentRow ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}>
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
                 <Card className="group relative overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-950 hover:shadow-md transition-all duration-300">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">Monto Total</CardTitle>
@@ -330,84 +330,67 @@ export default function MyLoanDetailPage() {
                 )}
             </div>
 
-            {showDisbursementInfo && investments.length > 0 && (
-                <div className="space-y-4">
-                    <div className="flex items-center gap-2 mb-2">
-                        <div className="p-1.5 rounded-full bg-indigo-50 dark:bg-indigo-950/30">
-                            <HandCoins className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                        </div>
-                        <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-slate-50">Desembolsos y Pagarés</h2>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {investments.map((investment) => {
-                            const participationInfo = participationData.find(p => p.id === investment.id);
-                            const participation = participationInfo ? participationInfo.participation : 0;
-                            return (
-                                <div key={investment.id} className="group relative flex flex-col bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden">
-                                    {/* Decorative left border */}
-                                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500 dark:bg-indigo-400" />
-
-                                    <div className="p-5 flex flex-col gap-4">
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mb-1">Fecha de Desembolso</p>
-                                                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-                                                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                                                    {formatDate(fromUnixTime(investment.createdAt.seconds))}
-                                                </p>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mb-1">Monto Recibido</p>
-                                                <p className="text-lg font-bold text-slate-900 dark:text-slate-50">{formatCurrency(investment.amount, 0)}</p>
-                                            </div>
-                                        </div>
-
-                                        <Separator className="bg-slate-100 dark:bg-slate-800" />
-
-                                        <div className="flex justify-between items-center">
-                                            <div className="flex items-center gap-2">
-                                                <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300">
-                                                    {investment.investorName.charAt(0)}
-                                                </div>
-                                                <div className="flex flex-col">
-                                                    <span className="text-xs font-semibold text-slate-900 dark:text-slate-200">{investment.investorName}</span>
-                                                    <span className="text-[10px] text-slate-500 capitalize">Inversionista • {formatPercent(participation)}</span>
-                                                </div>
-                                            </div>
-
-                                            <Button
-                                                variant='outline'
-                                                size='sm'
-                                                onClick={() => handleViewPromissory(investment)}
-                                                className="h-8 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-medium"
-                                            >
-                                                <FileSignature className='h-3.5 w-3.5 mr-2 text-indigo-500' /> Ver Pagaré
-                                            </Button>
-                                        </div>
-                                    </div>
-
-                                    {/* Ticket visual effect */}
-                                    <div className="absolute -right-2 top-1/2 -translate-y-1/2 w-4 h-4 bg-slate-50 dark:bg-black rounded-full" />
+            {showDisbursementInfo && (
+                <Accordion type="single" collapsible className="w-full" defaultValue="item-1">
+                    <AccordionItem value="item-1" className="border rounded-xl overflow-hidden shadow-lg bg-white dark:bg-slate-900">
+                        <AccordionTrigger className="px-6 py-4 hover:no-underline hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                            <h2 className="text-lg font-semibold flex items-center gap-3">
+                                <div className="p-2 rounded-full bg-slate-100 dark:bg-slate-800">
+                                    <HandCoins className="h-5 w-5 text-slate-600 dark:text-slate-400" />
                                 </div>
-                            );
-                        })}
-                    </div>
-                </div>
+                                Desembolsos Recibidos y Pagarés
+                            </h2>
+                        </AccordionTrigger>
+                        <AccordionContent className="px-0">
+                            <div className="border-t dark:border-slate-700">
+                                <CardContent className='p-0'>
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Fecha</TableHead>
+                                                <TableHead>Banquero</TableHead>
+                                                <TableHead className='text-right'>Participación</TableHead>
+                                                <TableHead className='text-right'>Monto</TableHead>
+                                                <TableHead className='text-right'>Pagaré</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {investments.map((investment) => {
+                                                const participationInfo = participationData.find(p => p.id === investment.id);
+                                                const participation = participationInfo ? participationInfo.participation : 0;
+                                                return (
+                                                    <TableRow key={investment.id}>
+                                                        <TableCell>{formatDate(fromUnixTime(investment.createdAt.seconds))}</TableCell>
+                                                        <TableCell>{investment.investorName}</TableCell>
+                                                        <TableCell className="text-right font-mono">{formatPercent(participation)}</TableCell>
+                                                        <TableCell className="text-right font-medium">{formatCurrency(investment.amount, 0)}</TableCell>
+                                                        <TableCell className="text-right">
+                                                            <Button variant='ghost' size='sm' onClick={() => handleViewPromissory(investment)}>
+                                                                <FileSignature className='h-4 w-4 mr-2' /> Ver
+                                                            </Button>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            })}
+                                        </TableBody>
+                                    </Table>
+                                </CardContent>
+                            </div>
+                        </AccordionContent>
+                    </AccordionItem>
+                </Accordion>
             )}
 
-            {/* Solo mostrar la tabla de amortización si el préstamo está 100% fondeado y tiene un plan real */}
-            {amortizationDetails?.schedule && amortizationDetails.schedule.some(r => r.type === 'payment') && (
-                <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-full bg-slate-100 dark:bg-slate-800">
-                            <Calculator className="h-5 w-5 text-slate-600 dark:text-slate-400" />
-                        </div>
-                        <h2 className="text-lg font-semibold">Plan de Amortización</h2>
+            {/* Tabla de Amortización con título */}
+            <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-full bg-slate-100 dark:bg-slate-800">
+                        <Calculator className="h-5 w-5 text-slate-600 dark:text-slate-400" />
                     </div>
-                    <AmortizationTable loan={loan} investments={investments} payments={payments} simulationDate={simulationDate} />
+                    <h2 className="text-lg font-semibold">Plan de Amortización</h2>
                 </div>
-            )}
+                <AmortizationTable loan={loan} investments={investments} payments={payments} simulationDate={simulationDate} />
+            </div>
 
             {selectedInvestment && (
                 <PromissoryNoteModal
