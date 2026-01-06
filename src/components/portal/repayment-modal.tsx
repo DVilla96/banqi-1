@@ -601,15 +601,21 @@ export default function RepaymentModal({ isOpen, onClose, payingLoan, payingLoan
             const daysToPayment = investorData?.daysToPayment || 0;
 
             // Interés REAL que recibe
-            // Si es la primera cuota, usamos el teórico (días exactos).
+            // Si es la primera cuota (period === 1), usamos el teórico (días exactos).
             // Si es cuota 2+, usamos proporcional directo (interés global * participación).
-            const useProportionalInterest = payingLoanBreakdown.period && payingLoanBreakdown.period > 1;
+            const periodNum = payingLoanBreakdown.period ? Number(payingLoanBreakdown.period) : 1;
+            const isFirstPeriod = periodNum === 1;
+            const useProportionalInterest = !isFirstPeriod; // Cuota 2+ usa proporcional
+            
+            // DEBUG - this appears in browser console
+            console.log('[MODAL BANKER] RAW payingLoanBreakdown.period:', payingLoanBreakdown.period, 'type:', typeof payingLoanBreakdown.period);
+            console.log(`[MODAL BANKER] Period check: periodNum=${periodNum}, isFirstPeriod=${isFirstPeriod}, useProportionalInterest=${useProportionalInterest}`);
 
             const actualInterestForInvestor = useProportionalInterest
                 ? payingLoanBreakdown.interest * participation
                 : theoreticalInterest * interestPaymentRatio;
 
-            // Capital: Si no hay capital en el pago global, ningún inversor recibe capital
+            // Capital: Simplemente proporcional al capital global
             let actualCapitalForInvestor: number;
             let installmentForInvestor: number;
 
@@ -618,11 +624,10 @@ export default function RepaymentModal({ isOpen, onClose, payingLoan, payingLoan
                 actualCapitalForInvestor = 0;
                 installmentForInvestor = actualInterestForInvestor;
             } else {
-                // La cuota del inversor (sin tech fee) = (capital global + interés global) * participación
-                const totalInstallmentExclTechFee = payingLoanBreakdown.capital + payingLoanBreakdown.interest;
-                installmentForInvestor = totalInstallmentExclTechFee * participation;
-                // Capital = Cuota del Inversor - Interés real del Inversor
-                actualCapitalForInvestor = installmentForInvestor - actualInterestForInvestor;
+                // Capital del inversor = Capital global * participación
+                actualCapitalForInvestor = payingLoanBreakdown.capital * participation;
+                // Cuota del inversor = Capital + Interés
+                installmentForInvestor = actualCapitalForInvestor + actualInterestForInvestor;
             }
 
             const isBanqi = inv.investorId === BANQI_FEE_INVESTOR_ID;

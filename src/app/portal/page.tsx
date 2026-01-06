@@ -474,6 +474,10 @@ export default function PortalPage() {
                 }
 
                 // FASE DE ESCRITURAS: Crear las inversiones y actualizar préstamos
+                // Generar un ID único para agrupar todas las inversiones de este pago
+                const paymentGroupId = `pg_${user.uid}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                const totalInGroup = verifiedLoans.length;
+
                 for (const { dist, loanData } of verifiedLoans) {
                     const proofUrl = uploadedProofs.get(dist.loan.id)!;
 
@@ -523,6 +527,8 @@ export default function PortalPage() {
                         isRepayment: true,
                         sourceBreakdown: sourceBreakdown,
                         paymentBreakdown: portionBreakdown,
+                        paymentGroupId: paymentGroupId, // Para agrupar pagos que van a múltiples préstamos
+                        totalInGroup: totalInGroup, // Cuántas confirmaciones se necesitan
                     };
 
                     transaction.set(doc(collection(db, 'investments')), investmentData);

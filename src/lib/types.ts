@@ -64,6 +64,9 @@ export type Investment = {
   isRepayment?: boolean;
   sourceBreakdown?: ReinvestmentSource[];
   paymentBreakdown?: Omit<PaymentBreakdown, 'details'>;
+  // Para agrupar pagos que van a múltiples préstamos
+  paymentGroupId?: string; // ID único que agrupa todas las inversiones del mismo pago
+  totalInGroup?: number; // Cuántas inversiones hay en este grupo (para saber si todas confirmaron)
 };
 
 export type Payment = {
@@ -77,6 +80,20 @@ export type Payment = {
   technologyFee: number;
   lateFee: number;
   receiptUrl?: string;
+  // Confirmaciones de banqueros
+  bankerConfirmations?: PaymentBankerConfirmation[];
+}
+
+// Confirmación de pago por cada banquero
+export type PaymentBankerConfirmation = {
+  investorId: string;
+  investorName: string;
+  amount: number; // Monto que debe recibir este banquero
+  capital: number;
+  interest: number;
+  status: 'pending' | 'confirmed' | 'disputed';
+  confirmedAt?: any; // Timestamp
+  disputeReason?: string;
 }
 
 export type ChartData = {
@@ -125,5 +142,6 @@ export type AmortizationRow = {
     technologyFee: number;
     lateFee: number;
     receiptUrl?: string;
+    paymentCount?: number; // Cuántos pagos se consolidaron en esta fila
   };
 };

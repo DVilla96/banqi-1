@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, doc, writeBatch, runTransaction, orderBy, updateDoc, getDoc, addDoc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, writeBatch, runTransaction, orderBy, updateDoc, getDoc, addDoc, Timestamp, getDocs } from 'firebase/firestore';
 import type { Investment, ReinvestmentSource, Payment, Loan } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -170,6 +170,22 @@ export default function PendingConfirmations({ loanId, borrowerId }: PendingConf
                 payingLoanDoc = await transaction.get(payingLoanRef);
             }
 
+            // Verificar si hay otras inversiones pendientes en el mismo grupo de pago
+            let allGroupConfirmed = true;
+            let totalPaymentAmount = investment.paymentBreakdown?.total || 0;
+            let totalPaymentCapital = investment.paymentBreakdown?.capital || 0;
+            let totalPaymentInterest = investment.paymentBreakdown?.interest || 0;
+            let totalPaymentTechFee = investment.paymentBreakdown?.technologyFee || 0;
+            let totalPaymentLateFee = investment.paymentBreakdown?.lateFee || 0;
+            
+            if (investment.paymentGroupId && investment.totalInGroup && investment.totalInGroup > 1) {
+                // Hay otras inversiones en este grupo, verificar si ya están confirmadas
+                // NOTA: No podemos hacer queries dentro de una transacción, pero podemos
+                // verificar después de la transacción. Por ahora, solo confirmamos esta inversión
+                // y NO creamos el Payment hasta que se verifique que todas están confirmadas.
+                allGroupConfirmed = false; // Asumimos que no, se verificará después
+            }
+
             // === FASE DE ESCRITURAS (todas las escrituras después) ===
             const loanData = loanDoc.data();
             const amountToConfirm = investment.amount;
@@ -178,32 +194,9 @@ export default function PendingConfirmations({ loanId, borrowerId }: PendingConf
             let newFundedPercentage = (newTotalFunded / loanData.amount) * 100;
             newFundedPercentage = Math.min(100, newFundedPercentage);
 
-            // If it's a repayment, we create new confirmed investments for each banker AND a payment record
+            // If it's a repayment, we create new confirmed investments for each banker
             if (investment.isRepayment && investment.sourceBreakdown) {
-                // 1. Create a payment record for the original borrower
-                if (investment.payerId && investment.paymentBreakdown && investment.payingLoanId) {
-                    const paymentData: Omit<Payment, 'id'> = {
-                        loanId: investment.payingLoanId,
-                        payerId: investment.payerId,
-                        paymentDate: investment.createdAt, // Use the payment date from when the repayment was made (supports simulation date)
-                        amount: investment.paymentBreakdown.total,
-                        capital: investment.paymentBreakdown.capital,
-                        interest: investment.paymentBreakdown.interest,
-                        technologyFee: investment.paymentBreakdown.technologyFee,
-                        lateFee: investment.paymentBreakdown.lateFee || 0,
-                    };
-                    transaction.set(doc(collection(db, 'payments')), paymentData);
-                    
-                    // Update the paying loan status if it was overdue (ya lo leímos arriba)
-                    if (payingLoanDoc && payingLoanDoc.exists() && payingLoanDoc.data().status === 'repayment-overdue' && payingLoanRef) {
-                        transaction.update(payingLoanRef, { status: 'repayment-active' });
-                    }
-
-                } else {
-                     console.error("Original loan for payment record not found!");
-                }
-                
-                // 2. Create new confirmed investments for each banker in the new loan
+                // 1. Crear las nuevas inversiones confirmadas para cada banquero
                 for (const source of investment.sourceBreakdown) {
                     const newInvestmentData: Omit<Investment, 'id'> = {
                         loanId: investment.loanId,
@@ -211,15 +204,19 @@ export default function PendingConfirmations({ loanId, borrowerId }: PendingConf
                         borrowerId: investment.borrowerId,
                         amount: source.amount,
                         status: 'confirmed',
-                        paymentProofUrl: investment.paymentProofUrl, // Reuse the proof
-                        createdAt: investment.createdAt, // Keep original timestamp
+                        paymentProofUrl: investment.paymentProofUrl,
+                        createdAt: investment.createdAt,
                         confirmedAt: Timestamp.now(),
                     };
                     const newInvestmentRef = doc(collection(db, 'investments'));
                     transaction.set(newInvestmentRef, newInvestmentData);
                 }
-                // 3. Delete the temporary pending investment document
-                transaction.delete(pendingInvestmentRef);
+                
+                // 2. Marcar esta inversión pendiente como confirmada (no eliminar, para poder verificar el grupo)
+                transaction.update(pendingInvestmentRef, {
+                    status: 'confirmed',
+                    confirmedAt: Timestamp.now(),
+                });
             } else {
                 // It's a direct investment, just confirm it
                 transaction.update(pendingInvestmentRef, {
@@ -235,6 +232,94 @@ export default function PendingConfirmations({ loanId, borrowerId }: PendingConf
             }
             transaction.update(loanRef, updatePayload);
         });
+
+        // DESPUÉS de la transacción: Verificar si todas las inversiones del grupo están confirmadas
+        // y si es así, crear el Payment consolidado
+        if (investment.isRepayment && investment.paymentGroupId && investment.payerId && investment.payingLoanId) {
+            // Consultar todas las inversiones del mismo grupo
+            const groupQuery = query(
+                collection(db, 'investments'),
+                where('paymentGroupId', '==', investment.paymentGroupId),
+                where('isRepayment', '==', true)
+            );
+            const groupSnapshot = await getDocs(groupQuery);
+            
+            // Verificar si TODAS están confirmadas
+            let allConfirmed = true;
+            let totalAmount = 0;
+            let totalCapital = 0;
+            let totalInterest = 0;
+            let totalTechFee = 0;
+            let totalLateFee = 0;
+            
+            groupSnapshot.docs.forEach(docSnap => {
+                const inv = docSnap.data() as Investment;
+                if (inv.status !== 'confirmed') {
+                    allConfirmed = false;
+                }
+                if (inv.paymentBreakdown) {
+                    totalAmount += inv.paymentBreakdown.total || 0;
+                    totalCapital += inv.paymentBreakdown.capital || 0;
+                    totalInterest += inv.paymentBreakdown.interest || 0;
+                    totalTechFee += inv.paymentBreakdown.technologyFee || 0;
+                    totalLateFee += inv.paymentBreakdown.lateFee || 0;
+                }
+            });
+            
+            if (allConfirmed && groupSnapshot.docs.length > 0) {
+                // ¡Todas confirmadas! Crear el Payment consolidado
+                const paymentData: Omit<Payment, 'id'> = {
+                    loanId: investment.payingLoanId,
+                    payerId: investment.payerId,
+                    paymentDate: investment.createdAt,
+                    amount: totalAmount,
+                    capital: totalCapital,
+                    interest: totalInterest,
+                    technologyFee: totalTechFee,
+                    lateFee: totalLateFee,
+                };
+                await addDoc(collection(db, 'payments'), paymentData);
+                
+                // Actualizar el estado del préstamo del deudor si estaba en mora
+                const payingLoanRef = doc(db, 'loanRequests', investment.payingLoanId);
+                const payingLoanSnap = await getDoc(payingLoanRef);
+                if (payingLoanSnap.exists() && payingLoanSnap.data().status === 'repayment-overdue') {
+                    await updateDoc(payingLoanRef, { status: 'repayment-active' });
+                }
+                
+                console.log('[CONFIRM] Todas las inversiones del grupo confirmadas. Payment creado:', {
+                    paymentGroupId: investment.paymentGroupId,
+                    totalAmount,
+                    confirmedCount: groupSnapshot.docs.length
+                });
+            } else {
+                console.log('[CONFIRM] Aún faltan confirmaciones en el grupo:', {
+                    paymentGroupId: investment.paymentGroupId,
+                    confirmedCount: groupSnapshot.docs.filter(d => d.data().status === 'confirmed').length,
+                    total: groupSnapshot.docs.length
+                });
+            }
+        } else if (investment.isRepayment && !investment.paymentGroupId && investment.payerId && investment.paymentBreakdown && investment.payingLoanId) {
+            // Inversión única (sin grupo) - crear Payment directamente
+            const paymentData: Omit<Payment, 'id'> = {
+                loanId: investment.payingLoanId,
+                payerId: investment.payerId,
+                paymentDate: investment.createdAt,
+                amount: investment.paymentBreakdown.total,
+                capital: investment.paymentBreakdown.capital,
+                interest: investment.paymentBreakdown.interest,
+                technologyFee: investment.paymentBreakdown.technologyFee,
+                lateFee: investment.paymentBreakdown.lateFee || 0,
+            };
+            await addDoc(collection(db, 'payments'), paymentData);
+            
+            // Actualizar el estado del préstamo del deudor si estaba en mora
+            const payingLoanRef = doc(db, 'loanRequests', investment.payingLoanId);
+            const payingLoanSnap = await getDoc(payingLoanRef);
+            if (payingLoanSnap.exists() && payingLoanSnap.data().status === 'repayment-overdue') {
+                await updateDoc(payingLoanRef, { status: 'repayment-active' });
+            }
+        }
 
         toast({
             title: '¡Pagarés Aceptados!',
